@@ -5,12 +5,18 @@ import SwiftUI
 final class MenuBarController: ObservableObject {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
-    private var eventMonitor: Any?
+    private nonisolated(unsafe) var eventMonitor: Any?
 
     init() {
         setupStatusItem()
         setupPopover()
         setupEventMonitor()
+    }
+
+    deinit {
+        if let eventMonitor = eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+        }
     }
 
     private func setupStatusItem() {
@@ -26,6 +32,7 @@ final class MenuBarController: ObservableObject {
 
     private func setupPopover() {
         popover = NSPopover()
+        // Match UsagePopoverView's fixed width of 320pt
         popover?.contentSize = NSSize(width: 320, height: 340)
         popover?.behavior = .transient
         popover?.contentViewController = NSHostingController(rootView: UsagePopoverView())

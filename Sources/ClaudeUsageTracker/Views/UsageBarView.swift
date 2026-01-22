@@ -16,6 +16,9 @@ struct UsageBarView: View {
             }
         }
         .frame(height: 8)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Usage progress")
+        .accessibilityValue("\(Int(progress * 100)) percent")
     }
 }
 
