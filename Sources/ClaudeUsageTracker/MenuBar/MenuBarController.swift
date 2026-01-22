@@ -7,23 +7,21 @@ final class MenuBarController: ObservableObject {
     private var popover: NSPopover?
     private nonisolated(unsafe) var eventMonitor: Any?
 
-    init() {
+    let viewModel: UsageViewModel
+
+    init(viewModel: UsageViewModel) {
+        self.viewModel = viewModel
         setupStatusItem()
         setupPopover()
         setupEventMonitor()
-    }
-
-    deinit {
-        if let eventMonitor = eventMonitor {
-            NSEvent.removeMonitor(eventMonitor)
-        }
+        startPolling()
     }
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem?.button {
-            button.title = "20%"
+            button.title = "--%"
             button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
             button.action = #selector(togglePopover)
             button.target = self
@@ -32,10 +30,11 @@ final class MenuBarController: ObservableObject {
 
     private func setupPopover() {
         popover = NSPopover()
-        // Match UsagePopoverView's fixed width of 320pt
         popover?.contentSize = NSSize(width: 320, height: 340)
         popover?.behavior = .transient
-        popover?.contentViewController = NSHostingController(rootView: UsagePopoverView())
+        popover?.contentViewController = NSHostingController(
+            rootView: UsagePopoverView(viewModel: viewModel)
+        )
     }
 
     private func setupEventMonitor() {
@@ -43,6 +42,28 @@ final class MenuBarController: ObservableObject {
             if let popover = self?.popover, popover.isShown {
                 popover.performClose(nil)
             }
+        }
+    }
+
+    private func startPolling() {
+        viewModel.startPolling()
+
+        // Observe viewModel changes to update status item
+        Task {
+            while true {
+                try? await Task.sleep(for: .seconds(1))
+                updateStatusItemTitle()
+            }
+        }
+    }
+
+    private func updateStatusItemTitle() {
+        guard let button = statusItem?.button else { return }
+
+        if let data = viewModel.usageData {
+            button.title = "\(data.fiveHour.percentage)%"
+        } else if viewModel.errorMessage != nil {
+            button.title = "--"
         }
     }
 
@@ -56,10 +77,9 @@ final class MenuBarController: ObservableObject {
         }
     }
 
-    func cleanup() {
+    deinit {
         if let eventMonitor = eventMonitor {
             NSEvent.removeMonitor(eventMonitor)
-            self.eventMonitor = nil
         }
     }
 }

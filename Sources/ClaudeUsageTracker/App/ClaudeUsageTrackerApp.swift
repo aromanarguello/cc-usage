@@ -2,12 +2,19 @@ import SwiftUI
 
 @main
 struct ClaudeUsageTrackerApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var menuBarController = MenuBarController()
+    @State private var menuBarController: MenuBarController?
+
+    init() {
+        let credentialService = CredentialService()
+        let apiService = UsageAPIService(credentialService: credentialService)
+        let viewModel = UsageViewModel(apiService: apiService)
+        _menuBarController = State(initialValue: MenuBarController(viewModel: viewModel))
+    }
 
     var body: some Scene {
         Settings {
-            Text("Claude Usage Tracker")
+            Text("Claude Usage Tracker Settings")
+                .frame(width: 300, height: 200)
         }
     }
 }
