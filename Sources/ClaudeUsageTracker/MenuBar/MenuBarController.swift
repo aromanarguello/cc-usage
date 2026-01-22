@@ -1,12 +1,13 @@
 import AppKit
 import SwiftUI
+import Combine
 
 @MainActor
 final class MenuBarController: ObservableObject {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
-    private nonisolated(unsafe) var eventMonitor: Any?
-    private var updateTask: Task<Void, Never>?
+    nonisolated(unsafe) private var eventMonitor: Any?
+    nonisolated(unsafe) private var updateTask: Task<Void, Never>?
 
     let viewModel: UsageViewModel
 
@@ -16,6 +17,13 @@ final class MenuBarController: ObservableObject {
         setupPopover()
         setupEventMonitor()
         startPolling()
+    }
+
+    nonisolated deinit {
+        if let eventMonitor = eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+        }
+        updateTask?.cancel()
     }
 
     private func setupStatusItem() {
@@ -31,10 +39,13 @@ final class MenuBarController: ObservableObject {
 
     private func setupPopover() {
         popover = NSPopover()
+        // Match UsagePopoverView's fixed width of 320pt
         popover?.contentSize = NSSize(width: 320, height: 340)
         popover?.behavior = .transient
         popover?.contentViewController = NSHostingController(
-            rootView: UsagePopoverView(viewModel: viewModel)
+            rootView: UsagePopoverView(viewModel: viewModel) {
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            }
         )
     }
 
@@ -49,7 +60,6 @@ final class MenuBarController: ObservableObject {
     private func startPolling() {
         viewModel.startPolling()
 
-        // Observe viewModel changes to update status item
         updateTask = Task {
             while !Task.isCancelled {
                 updateStatusItemTitle()
@@ -62,9 +72,23 @@ final class MenuBarController: ObservableObject {
         guard let button = statusItem?.button else { return }
 
         if let data = viewModel.usageData {
-            button.title = "\(data.fiveHour.percentage)%"
+            let percentage = data.fiveHour.percentage
+            button.title = String(format: "%d%%", percentage)
+
+            // Color coding based on usage
+            if percentage >= 90 {
+                button.contentTintColor = .systemRed
+            } else if percentage >= 70 {
+                button.contentTintColor = .systemOrange
+            } else {
+                button.contentTintColor = nil
+            }
+        } else if viewModel.isLoading {
+            button.title = "..."
+            button.contentTintColor = nil
         } else if viewModel.errorMessage != nil {
             button.title = "--"
+            button.contentTintColor = .systemOrange
         }
     }
 
@@ -75,13 +99,8 @@ final class MenuBarController: ObservableObject {
             popover.performClose(nil)
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        }
-    }
-
-    deinit {
-        updateTask?.cancel()
-        if let eventMonitor = eventMonitor {
-            NSEvent.removeMonitor(eventMonitor)
+            // Refresh when opening popover
+            Task { await viewModel.refresh() }
         }
     }
 }

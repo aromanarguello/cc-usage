@@ -12,6 +12,9 @@ final class UsageViewModel {
     private let apiService: UsageAPIService
     private var pollingTask: Task<Void, Never>?
 
+    @ObservationIgnored
+    @AppStorage("refreshInterval") private var refreshInterval: Double = 60
+
     var timeSinceUpdate: String {
         guard let lastFetchTime else { return "Never" }
         let seconds = Int(Date().timeIntervalSince(lastFetchTime))
@@ -38,19 +41,18 @@ final class UsageViewModel {
             lastFetchTime = Date()
         } catch {
             errorMessage = error.localizedDescription
-            // Keep existing data on error
         }
 
         isLoading = false
     }
 
-    func startPolling(interval: TimeInterval = 60) {
+    func startPolling() {
         stopPolling()
 
         pollingTask = Task {
             while !Task.isCancelled {
                 await refresh()
-                try? await Task.sleep(for: .seconds(interval))
+                try? await Task.sleep(for: .seconds(refreshInterval))
             }
         }
     }
