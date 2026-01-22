@@ -6,6 +6,7 @@ final class MenuBarController: ObservableObject {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private nonisolated(unsafe) var eventMonitor: Any?
+    private var updateTask: Task<Void, Never>?
 
     let viewModel: UsageViewModel
 
@@ -49,10 +50,10 @@ final class MenuBarController: ObservableObject {
         viewModel.startPolling()
 
         // Observe viewModel changes to update status item
-        Task {
-            while true {
-                try? await Task.sleep(for: .seconds(1))
+        updateTask = Task {
+            while !Task.isCancelled {
                 updateStatusItemTitle()
+                try? await Task.sleep(for: .seconds(1))
             }
         }
     }
@@ -78,6 +79,7 @@ final class MenuBarController: ObservableObject {
     }
 
     deinit {
+        updateTask?.cancel()
         if let eventMonitor = eventMonitor {
             NSEvent.removeMonitor(eventMonitor)
         }
