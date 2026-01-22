@@ -13,8 +13,7 @@ struct ClaudeUsageTrackerApp: App {
 
     var body: some Scene {
         Settings {
-            Text("Claude Usage Tracker Settings")
-                .frame(width: 300, height: 200)
+            SettingsView()
         }
     }
 }
