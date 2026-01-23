@@ -96,6 +96,11 @@ actor AgentCounter {
         return killedCount
     }
 
+    func getAllSubagents() async -> [ProcessInfo] {
+        let processes = getClaudeProcesses()
+        return processes.filter { $0.isSubagent }
+    }
+
     private func getClaudeProcesses() -> [ProcessInfo] {
         // Get process list with PID, PPID, elapsed time, memory (RSS), CPU%, and command
         // etime format: [[dd-]hh:]mm:ss

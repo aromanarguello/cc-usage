@@ -87,6 +87,14 @@ final class UsageViewModel {
         return killed
     }
 
+    func killAllSubagents() async -> Int {
+        guard let agents = agentCount, agents.subagents > 0 else { return 0 }
+        let subagents = await agentCounter.getAllSubagents()
+        let killed = await agentCounter.killProcesses(subagents)
+        await refreshAgentCount()
+        return killed
+    }
+
     func startPolling() {
         stopPolling()
 
