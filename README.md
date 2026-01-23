@@ -2,6 +2,8 @@
 
 A native macOS menu bar app for tracking Claude Code usage limits in real-time.
 
+100% built by Claude.
+
 ## Features
 
 - Shows 5-hour usage window percentage in menu bar
