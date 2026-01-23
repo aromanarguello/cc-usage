@@ -58,6 +58,44 @@ actor AgentCounter {
         return killedCount
     }
 
+    func detectOrphanedSubagents() async -> [ProcessInfo] {
+        let processes = getClaudeProcesses()
+        let sessions = processes.filter { !$0.isSubagent }
+        let subagents = processes.filter { $0.isSubagent }
+
+        // Multi-signal orphan detection:
+        // 1. Parent PID = 1 (reparented to init)
+        // 2. No active sessions OR session count is 0
+        // 3. Low CPU activity (< 1%)
+        let orphans = subagents.filter { subagent in
+            let parentGone = subagent.parentPID == 1
+            let noSessions = sessions.isEmpty
+            let lowCPU = subagent.cpuPercent < 1.0
+
+            return parentGone && noSessions && lowCPU
+        }
+
+        return orphans
+    }
+
+    func killProcesses(_ processes: [ProcessInfo]) async -> Int {
+        var killedCount = 0
+
+        for process in processes {
+            let termResult = sendSignal(SIGTERM, to: process.pid)
+            if termResult {
+                try? await Task.sleep(for: .milliseconds(500))
+
+                if isProcessRunning(process.pid) {
+                    _ = sendSignal(SIGKILL, to: process.pid)
+                }
+                killedCount += 1
+            }
+        }
+
+        return killedCount
+    }
+
     private func getClaudeProcesses() -> [ProcessInfo] {
         // Get process list with PID, PPID, elapsed time, memory (RSS), CPU%, and command
         // etime format: [[dd-]hh:]mm:ss
