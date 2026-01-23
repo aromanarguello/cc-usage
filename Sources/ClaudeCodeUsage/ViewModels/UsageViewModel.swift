@@ -11,6 +11,7 @@ final class UsageViewModel {
     private(set) var agentCount: AgentCount?
 
     private let apiService: UsageAPIService
+    private let credentialService: CredentialService
     private let agentCounter = AgentCounter()
     private var pollingTask: Task<Void, Never>?
 
@@ -28,8 +29,29 @@ final class UsageViewModel {
         }
     }
 
-    init(apiService: UsageAPIService) {
+    init(apiService: UsageAPIService, credentialService: CredentialService) {
         self.apiService = apiService
+        self.credentialService = credentialService
+    }
+
+    // MARK: - Credential Management
+
+    var isUsingManualAPIKey: Bool {
+        get async {
+            return await credentialService.hasManualAPIKey()
+        }
+    }
+
+    func saveManualAPIKey(_ key: String) async throws {
+        try await credentialService.saveManualAPIKey(key)
+    }
+
+    func deleteManualAPIKey() async throws {
+        try await credentialService.deleteManualAPIKey()
+    }
+
+    func validateAPIKeyFormat(_ key: String) async -> Bool {
+        return await credentialService.validateAPIKeyFormat(key)
     }
 
     func refresh() async {

@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Setup menu bar
         let credentialService = CredentialService()
         let apiService = UsageAPIService(credentialService: credentialService)
-        let viewModel = UsageViewModel(apiService: apiService)
+        let viewModel = UsageViewModel(apiService: apiService, credentialService: credentialService)
         menuBarController = MenuBarController(viewModel: viewModel)
     }
 }

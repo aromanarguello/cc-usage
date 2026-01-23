@@ -8,6 +8,13 @@ struct UsagePopoverView: View {
     @State private var showKillConfirmation = false
     @State private var isKillingAgents = false
 
+    // API Key configuration state
+    @State private var apiKeyInput = ""
+    @State private var isShowingKey = false
+    @State private var isSavingKey = false
+    @State private var keyError: String? = nil
+    @State private var showKeySaved = false
+
     private let updateChecker = UpdateChecker()
 
     enum UpdateAlertType: Identifiable {
@@ -47,17 +54,8 @@ struct UsagePopoverView: View {
             Divider()
 
             if let error = viewModel.errorMessage, viewModel.usageData == nil {
-                // Error state (no cached data)
-                VStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
-                        .foregroundColor(.orange)
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(32)
+                // Error state - show API key configuration
+                apiKeyConfigurationView(errorMessage: error)
             } else if let data = viewModel.usageData {
                 // 5-Hour Window
                 usageSection(
@@ -353,11 +351,138 @@ struct UsagePopoverView: View {
         .padding()
         .background(Color.orange.opacity(0.15))
     }
+
+    // MARK: - API Key Configuration
+
+    @ViewBuilder
+    private func apiKeyConfigurationView(errorMessage: String) -> some View {
+        VStack(spacing: 16) {
+            // Warning icon
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 36))
+                .foregroundColor(.orange)
+
+            // Message
+            VStack(spacing: 4) {
+                Text("Couldn't read Claude credentials")
+                    .font(.callout)
+                    .fontWeight(.medium)
+                Text("Enter your Anthropic API key below")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            // API Key input field
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Group {
+                        if isShowingKey {
+                            TextField("sk-ant-api03-...", text: $apiKeyInput)
+                        } else {
+                            SecureField("sk-ant-api03-...", text: $apiKeyInput)
+                        }
+                    }
+                    .textFieldStyle(.plain)
+                    .font(.system(.body, design: .monospaced))
+                    .padding(8)
+                    .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(keyError != nil ? Color.red.opacity(0.8) : Color.gray.opacity(0.3), lineWidth: 1)
+                    )
+
+                    // Reveal toggle
+                    Button(action: { isShowingKey.toggle() }) {
+                        Image(systemName: isShowingKey ? "eye.slash" : "eye")
+                            .foregroundColor(.secondary)
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                // Error message
+                if let error = keyError {
+                    Text(error)
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                }
+            }
+
+            // Save button
+            Button(action: saveAPIKey) {
+                HStack(spacing: 6) {
+                    if isSavingKey {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                    } else if showKeySaved {
+                        Image(systemName: "checkmark")
+                            .foregroundColor(.white)
+                    }
+                    Text(showKeySaved ? "Saved!" : "Save API Key")
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(apiKeyInput.isEmpty ? Color.gray : Color.orange)
+                .foregroundColor(.white)
+                .fontWeight(.medium)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .disabled(apiKeyInput.isEmpty || isSavingKey)
+
+            // Trust signal
+            HStack(spacing: 4) {
+                Image(systemName: "lock.fill")
+                    .font(.caption2)
+                Text("Stored securely in Keychain")
+                    .font(.caption2)
+            }
+            .foregroundColor(.secondary)
+        }
+        .padding(24)
+    }
+
+    private func saveAPIKey() {
+        keyError = nil
+        isSavingKey = true
+
+        Task {
+            do {
+                try await viewModel.saveManualAPIKey(apiKeyInput)
+
+                await MainActor.run {
+                    showKeySaved = true
+                    isSavingKey = false
+                }
+
+                try? await Task.sleep(nanoseconds: 800_000_000)
+
+                await MainActor.run {
+                    showKeySaved = false
+                    apiKeyInput = ""
+                }
+
+                await viewModel.refresh()
+
+            } catch CredentialError.invalidAPIKeyFormat {
+                await MainActor.run {
+                    keyError = "Invalid API key format. Keys start with sk-ant-"
+                    isSavingKey = false
+                }
+            } catch {
+                await MainActor.run {
+                    keyError = "Failed to save: \(error.localizedDescription)"
+                    isSavingKey = false
+                }
+            }
+        }
+    }
 }
 
 #Preview {
     let credentialService = CredentialService()
     let apiService = UsageAPIService(credentialService: credentialService)
-    let viewModel = UsageViewModel(apiService: apiService)
+    let viewModel = UsageViewModel(apiService: apiService, credentialService: credentialService)
     return UsagePopoverView(viewModel: viewModel)
 }
