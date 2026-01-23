@@ -403,9 +403,9 @@ struct UsagePopoverView: View {
                 HStack(spacing: 8) {
                     Group {
                         if isShowingKey {
-                            TextField("sk-ant-api03-...", text: $apiKeyInput)
+                            TextField("sk-ant-...", text: $apiKeyInput)
                         } else {
-                            SecureField("sk-ant-api03-...", text: $apiKeyInput)
+                            SecureField("sk-ant-...", text: $apiKeyInput)
                         }
                     }
                     .textFieldStyle(.plain)
