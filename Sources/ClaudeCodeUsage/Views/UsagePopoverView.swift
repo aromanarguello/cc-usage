@@ -1,8 +1,26 @@
 import SwiftUI
+import AppKit
 
 struct UsagePopoverView: View {
     @Bindable var viewModel: UsageViewModel
-    var onOpenSettings: () -> Void = {}
+    @State private var isCheckingUpdate = false
+    @State private var updateAlert: UpdateAlertType? = nil
+
+    private let updateChecker = UpdateChecker()
+
+    enum UpdateAlertType: Identifiable {
+        case available(version: String, url: String?)
+        case upToDate
+        case error(String)
+
+        var id: String {
+            switch self {
+            case .available: return "available"
+            case .upToDate: return "upToDate"
+            case .error: return "error"
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -97,10 +115,16 @@ struct UsagePopoverView: View {
             Divider()
 
             HStack {
-                Button("Settings") {
-                    onOpenSettings()
+                Button(action: checkForUpdates) {
+                    if isCheckingUpdate {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                    } else {
+                        Text("Check for Updates")
+                    }
                 }
                 .buttonStyle(.plain)
+                .disabled(isCheckingUpdate)
                 Spacer()
                 Button("Quit") {
                     NSApplication.shared.terminate(nil)
@@ -112,6 +136,55 @@ struct UsagePopoverView: View {
         }
         .frame(width: 320)
         .background(.ultraThinMaterial)
+        .alert(item: $updateAlert) { alert in
+            switch alert {
+            case .available(let version, let url):
+                return Alert(
+                    title: Text("Update Available"),
+                    message: Text("Version \(version) is available."),
+                    primaryButton: .default(Text("Download")) {
+                        if let url = url, let downloadURL = URL(string: url) {
+                            NSWorkspace.shared.open(downloadURL)
+                        }
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .upToDate:
+                return Alert(
+                    title: Text("Up to Date"),
+                    message: Text("You're running the latest version."),
+                    dismissButton: .default(Text("OK"))
+                )
+            case .error(let message):
+                return Alert(
+                    title: Text("Update Check Failed"),
+                    message: Text(message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
+        }
+    }
+
+    private func checkForUpdates() {
+        isCheckingUpdate = true
+        Task {
+            do {
+                let result = try await updateChecker.checkForUpdates()
+                await MainActor.run {
+                    if result.updateAvailable {
+                        updateAlert = .available(version: result.latestVersion, url: result.downloadURL)
+                    } else {
+                        updateAlert = .upToDate
+                    }
+                    isCheckingUpdate = false
+                }
+            } catch {
+                await MainActor.run {
+                    updateAlert = .error(error.localizedDescription)
+                    isCheckingUpdate = false
+                }
+            }
+        }
     }
 
     @ViewBuilder

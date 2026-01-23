@@ -43,9 +43,7 @@ final class MenuBarController: ObservableObject {
         popover?.contentSize = NSSize(width: 320, height: 340)
         popover?.behavior = .transient
         popover?.contentViewController = NSHostingController(
-            rootView: UsagePopoverView(viewModel: viewModel) {
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-            }
+            rootView: UsagePopoverView(viewModel: viewModel)
         )
     }
 

@@ -12,8 +12,10 @@ struct ClaudeUsageTrackerApp: App {
     }
 
     var body: some Scene {
-        Settings {
-            SettingsView()
+        // Menu bar only app - no main window
+        WindowGroup {
+            EmptyView()
         }
+        .windowResizability(.contentSize)
     }
 }
