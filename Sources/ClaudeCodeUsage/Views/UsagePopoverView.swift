@@ -5,6 +5,8 @@ struct UsagePopoverView: View {
     @Bindable var viewModel: UsageViewModel
     @State private var isCheckingUpdate = false
     @State private var updateAlert: UpdateAlertType? = nil
+    @State private var showKillConfirmation = false
+    @State private var isKillingAgents = false
 
     private let updateChecker = UpdateChecker()
 
@@ -82,6 +84,13 @@ struct UsagePopoverView: View {
                     Divider()
 
                     agentSection(agents: agents)
+                }
+
+                // Hanging Agents Warning
+                if let agents = viewModel.agentCount, !agents.hangingSubagents.isEmpty {
+                    Divider()
+
+                    hangingAgentsWarning(count: agents.hangingSubagents.count)
                 }
             } else if viewModel.isLoading {
                 ProgressView()
@@ -169,6 +178,19 @@ struct UsagePopoverView: View {
                     dismissButton: .default(Text("OK"))
                 )
             }
+        }
+        .alert("Kill Hanging Agents?", isPresented: $showKillConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Kill", role: .destructive) {
+                Task {
+                    isKillingAgents = true
+                    _ = await viewModel.killHangingAgents()
+                    isKillingAgents = false
+                }
+            }
+        } message: {
+            let count = viewModel.agentCount?.hangingSubagents.count ?? 0
+            Text("This will terminate \(count) subagent process\(count == 1 ? "" : "es") that \(count == 1 ? "has" : "have") been running for over 3 hours.")
         }
     }
 
@@ -284,6 +306,33 @@ struct UsagePopoverView: View {
             }
         }
         .padding()
+    }
+
+    @ViewBuilder
+    private func hangingAgentsWarning(count: Int) -> some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+
+            Text("\(count) hanging agent\(count == 1 ? "" : "s") (>3h)")
+                .font(.callout)
+
+            Spacer()
+
+            Button(action: { showKillConfirmation = true }) {
+                if isKillingAgents {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                } else {
+                    Text("Kill")
+                        .foregroundColor(.red)
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(isKillingAgents)
+        }
+        .padding()
+        .background(Color.orange.opacity(0.15))
     }
 }
 

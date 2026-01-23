@@ -55,6 +55,13 @@ final class UsageViewModel {
         agentCount = await agentCounter.countAgents()
     }
 
+    func killHangingAgents() async -> Int {
+        guard let hanging = agentCount?.hangingSubagents, !hanging.isEmpty else { return 0 }
+        let killed = await agentCounter.killHangingAgents(hanging)
+        await refreshAgentCount()
+        return killed
+    }
+
     func startPolling() {
         stopPolling()
 
