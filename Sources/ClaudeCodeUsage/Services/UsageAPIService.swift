@@ -12,7 +12,7 @@ enum APIError: Error, LocalizedError {
         case .invalidURL:
             return "Invalid API URL"
         case .unauthorized:
-            return "Session expired. Re-login to Claude Code."
+            return "Token expired. Run `claude` in terminal to refresh."
         case .networkError(let error):
             return "Network error: \(error.localizedDescription)"
         case .decodingError(let error):
@@ -26,12 +26,31 @@ enum APIError: Error, LocalizedError {
 actor UsageAPIService {
     private let baseURL = "https://api.anthropic.com/api/oauth/usage"
     private let credentialService: CredentialService
+    private var hasAttemptedRefresh = false
 
     init(credentialService: CredentialService) {
         self.credentialService = credentialService
     }
 
     func fetchUsage() async throws -> UsageData {
+        do {
+            return try await performFetch()
+        } catch APIError.unauthorized {
+            // Try to refresh token by spawning CLI, then retry once
+            if !hasAttemptedRefresh {
+                hasAttemptedRefresh = true
+                if await triggerTokenRefresh() {
+                    // Small delay to let keychain update
+                    try? await Task.sleep(for: .milliseconds(500))
+                    return try await performFetch()
+                }
+            }
+            hasAttemptedRefresh = false
+            throw APIError.unauthorized
+        }
+    }
+
+    private func performFetch() async throws -> UsageData {
         let accessToken = try await credentialService.getAccessToken()
 
         guard let url = URL(string: baseURL) else {
@@ -57,7 +76,7 @@ actor UsageAPIService {
 
         switch httpResponse.statusCode {
         case 200:
-            break
+            hasAttemptedRefresh = false  // Reset on success
         case 401:
             throw APIError.unauthorized
         default:
@@ -89,6 +108,36 @@ actor UsageAPIService {
             return apiResponse.toUsageData()
         } catch {
             throw APIError.decodingError(error)
+        }
+    }
+
+    /// Spawns the Claude CLI to trigger its internal token refresh mechanism
+    private func triggerTokenRefresh() async -> Bool {
+        // Find claude binary - try common locations
+        let possiblePaths = [
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/claude").path,
+            "/usr/local/bin/claude",
+            "/opt/homebrew/bin/claude"
+        ]
+
+        let claudePath = possiblePaths.first { FileManager.default.fileExists(atPath: $0) }
+
+        guard let path = claudePath else {
+            return false
+        }
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: path)
+        task.arguments = ["--version"]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+
+        do {
+            try task.run()
+            task.waitUntilExit()
+            return task.terminationStatus == 0
+        } catch {
+            return false
         }
     }
 }

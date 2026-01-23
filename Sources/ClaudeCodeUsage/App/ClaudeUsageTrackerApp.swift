@@ -2,20 +2,12 @@ import SwiftUI
 
 @main
 struct ClaudeUsageTrackerApp: App {
-    @State private var menuBarController: MenuBarController?
-
-    init() {
-        let credentialService = CredentialService()
-        let apiService = UsageAPIService(credentialService: credentialService)
-        let viewModel = UsageViewModel(apiService: apiService)
-        _menuBarController = State(initialValue: MenuBarController(viewModel: viewModel))
-    }
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        // Menu bar only app - no main window
-        WindowGroup {
+        // Menu bar only app - use Settings instead of WindowGroup to avoid empty window
+        Settings {
             EmptyView()
         }
-        .windowResizability(.contentSize)
     }
 }

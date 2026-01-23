@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 struct ProcessInfo: Sendable {
@@ -52,7 +53,9 @@ actor AgentCounter {
         // etime format: [[dd-]hh:]mm:ss
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        task.arguments = ["-c", "ps -eo pid,etime,command | grep -E 'claude' | grep -v grep | grep -v ClaudeCodeUsage"]
+        // Match only the actual claude CLI binary, not MCP plugins with "claude" in path
+        // Looks for: " claude " or "/claude " (the actual CLI command, not paths containing "claude")
+        task.arguments = ["-c", "ps -eo pid,etime,command | grep -E '( |/)claude( |$)' | grep -v grep | grep -v ClaudeCodeUsage"]
 
         let pipe = Pipe()
         task.standardOutput = pipe

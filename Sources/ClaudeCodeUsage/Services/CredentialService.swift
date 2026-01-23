@@ -10,7 +10,7 @@ enum CredentialError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notFound:
-            return "Claude Code credentials not found. Run `claude` to authenticate."
+            return "Not logged in. Run `claude` in terminal to authenticate."
         case .invalidData:
             return "Invalid credential data format."
         case .keychainError(let status):
