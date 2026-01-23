@@ -81,28 +81,7 @@ struct UsagePopoverView: View {
                 if let agents = viewModel.agentCount, agents.total > 0 {
                     Divider()
 
-                    HStack {
-                        Image(systemName: "person.2")
-                            .foregroundColor(.secondary)
-                        Text("Active Agents")
-                        Spacer()
-                        Text("\(agents.total)")
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                    }
-                    .padding()
-
-                    HStack {
-                        Text("\(agents.sessions) sessions")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Text("\(agents.subagents) subagents")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
+                    agentSection(agents: agents)
                 }
             } else if viewModel.isLoading {
                 ProgressView()
@@ -239,6 +218,70 @@ struct UsagePopoverView: View {
             Text("\(resetPrefix) \(window.timeUntilReset())")
                 .font(.caption)
                 .foregroundColor(.secondary)
+        }
+        .padding()
+    }
+
+    @ViewBuilder
+    private func agentSection(agents: AgentCount) -> some View {
+        let sessionColor = Color(hex: "06B6D4")  // Cyan
+        let subagentColor = Color(hex: "8B5CF6") // Purple
+
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center) {
+                Image(systemName: "bolt.horizontal.circle")
+                    .foregroundColor(.secondary)
+                Text("Active Agents")
+                Spacer()
+                Text("\(agents.total)")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+            }
+
+            // Segmented bar showing sessions vs subagents
+            GeometryReader { geometry in
+                let sessionRatio = agents.total > 0 ? CGFloat(agents.sessions) / CGFloat(agents.total) : 0
+
+                HStack(spacing: 2) {
+                    // Sessions segment
+                    if agents.sessions > 0 {
+                        Capsule()
+                            .fill(sessionColor)
+                            .frame(width: max(8, (geometry.size.width - 2) * sessionRatio))
+                    }
+
+                    // Subagents segment
+                    if agents.subagents > 0 {
+                        Capsule()
+                            .fill(subagentColor)
+                            .frame(width: max(8, (geometry.size.width - 2) * (1 - sessionRatio)))
+                    }
+                }
+            }
+            .frame(height: 8)
+
+            // Legend
+            HStack(spacing: 16) {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(sessionColor)
+                        .frame(width: 6, height: 6)
+                    Text("\(agents.sessions) sessions")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(subagentColor)
+                        .frame(width: 6, height: 6)
+                    Text("\(agents.subagents) subagents")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+            }
         }
         .padding()
     }

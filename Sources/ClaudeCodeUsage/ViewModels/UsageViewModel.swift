@@ -8,7 +8,7 @@ final class UsageViewModel {
     private(set) var errorMessage: String?
     private(set) var isLoading = false
     private(set) var lastFetchTime: Date?
-    private(set) var agentCount: AgentCounter.AgentCount?
+    private(set) var agentCount: AgentCount?
 
     private let apiService: UsageAPIService
     private let agentCounter = AgentCounter()
