@@ -1,7 +1,7 @@
 import Foundation
 
 actor UpdateChecker {
-    private let currentVersion = "1.0.0"
+    private let currentVersion = "1.1.0"
     private let githubRepo = "aromanarguello/cc-usage"
 
     struct UpdateResult {
