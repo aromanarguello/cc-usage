@@ -7,6 +7,7 @@ struct UsagePopoverView: View {
     @State private var updateAlert: UpdateAlertType? = nil
     @State private var showKillConfirmation = false
     @State private var isKillingAgents = false
+    @State private var showSettings = false
 
     // API Key configuration state
     @State private var apiKeyInput = ""
@@ -37,6 +38,13 @@ struct UsagePopoverView: View {
             HStack {
                 Text("Claude Usage")
                     .font(.headline)
+
+                Button(action: { showSettings = true }) {
+                    Image(systemName: "gearshape")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+
                 Spacer()
                 if let subscription = viewModel.usageData?.subscription {
                     Text(subscription)
@@ -189,6 +197,9 @@ struct UsagePopoverView: View {
         } message: {
             let count = viewModel.agentCount?.hangingSubagents.count ?? 0
             Text("This will terminate \(count) subagent process\(count == 1 ? "" : "es") that \(count == 1 ? "has" : "have") been running for over 3 hours.")
+        }
+        .sheet(isPresented: $showSettings) {
+            APIKeySettingsView(viewModel: viewModel)
         }
     }
 
