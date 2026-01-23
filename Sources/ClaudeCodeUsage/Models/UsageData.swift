@@ -44,31 +44,35 @@ struct UsageData: Sendable {
 // MARK: - API Response Decoding
 
 struct UsageAPIResponse: Decodable {
-    let shortTermUtilization: Double
-    let shortTermResetsAt: Date
-    let longTermUtilization: Double
-    let longTermResetsAt: Date
-    let subscription: String?
+    let fiveHour: UsageWindowResponse
+    let sevenDay: UsageWindowResponse
+
+    struct UsageWindowResponse: Decodable {
+        let utilization: Double
+        let resetsAt: Date
+
+        enum CodingKeys: String, CodingKey {
+            case utilization
+            case resetsAt = "resets_at"
+        }
+    }
 
     enum CodingKeys: String, CodingKey {
-        case shortTermUtilization = "short_term_utilization"
-        case shortTermResetsAt = "short_term_resets_at"
-        case longTermUtilization = "long_term_utilization"
-        case longTermResetsAt = "long_term_resets_at"
-        case subscription
+        case fiveHour = "five_hour"
+        case sevenDay = "seven_day"
     }
 
     func toUsageData() -> UsageData {
         UsageData(
             fiveHour: UsageData.UsageWindow(
-                utilization: shortTermUtilization,
-                resetsAt: shortTermResetsAt
+                utilization: fiveHour.utilization / 100.0,  // API returns percentage, convert to decimal
+                resetsAt: fiveHour.resetsAt
             ),
             sevenDay: UsageData.UsageWindow(
-                utilization: longTermUtilization,
-                resetsAt: longTermResetsAt
+                utilization: sevenDay.utilization / 100.0,  // API returns percentage, convert to decimal
+                resetsAt: sevenDay.resetsAt
             ),
-            subscription: subscription ?? "Pro",
+            subscription: "Max",  // Could be read from keychain if needed
             lastUpdated: Date()
         )
     }

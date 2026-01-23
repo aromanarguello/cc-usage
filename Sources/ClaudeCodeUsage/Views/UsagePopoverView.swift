@@ -123,13 +123,13 @@ struct UsagePopoverView: View {
         resetPrefix: String
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(alignment: .center) {
                 Image(systemName: icon)
                     .foregroundColor(.secondary)
                 Text(title)
                 Spacer()
                 Text("\(window.percentage)%")
-                    .fontWeight(.medium)
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
                     .monospacedDigit()
             }
 

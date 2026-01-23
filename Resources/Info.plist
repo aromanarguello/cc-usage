@@ -6,13 +6,13 @@
     <string>en</string>
 
     <key>CFBundleExecutable</key>
-    <string>ClaudeUsageTracker</string>
+    <string>ClaudeCodeUsage</string>
 
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
 
     <key>CFBundleIdentifier</key>
-    <string>com.claudeusagetracker.app</string>
+    <string>com.claudecodeusage.app</string>
 
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>

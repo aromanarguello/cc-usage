@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:cc-usage}",
+            "name": "Debug ClaudeUsageTracker",
+            "program": "${workspaceFolder:cc-usage}/.build/debug/ClaudeUsageTracker",
+            "preLaunchTask": "swift: Build Debug ClaudeUsageTracker"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:cc-usage}",
+            "name": "Release ClaudeUsageTracker",
+            "program": "${workspaceFolder:cc-usage}/.build/release/ClaudeUsageTracker",
+            "preLaunchTask": "swift: Build Release ClaudeUsageTracker"
+        }
+    ]
+}

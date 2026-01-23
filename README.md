@@ -21,7 +21,7 @@ A native macOS menu bar app for tracking Claude Code usage limits in real-time.
 swift build -c release
 ```
 
-The built app will be at `.build/release/ClaudeUsageTracker`.
+The built app will be at `.build/release/ClaudeCodeUsage`.
 
 ## Usage
 
@@ -62,9 +62,9 @@ make all
 
 | Command | Output |
 |---------|--------|
-| `make release` | `release/ClaudeUsageTracker.app` (unsigned) |
-| `make sign` | `release/ClaudeUsageTracker.app` (signed) |
-| `make all` | `release/ClaudeUsageTracker.app` + `release/ClaudeUsageTracker-1.0.0.dmg` (notarized) |
+| `make release` | `release/ClaudeCodeUsage.app` (unsigned) |
+| `make sign` | `release/ClaudeCodeUsage.app` (signed) |
+| `make all` | `release/ClaudeCodeUsage.app` + `release/ClaudeCodeUsage-1.0.0.dmg` (notarized) |
 
 ## License
 

@@ -5,7 +5,7 @@ build:
 	swift build
 
 run: build
-	.build/debug/ClaudeUsageTracker
+	.build/debug/ClaudeCodeUsage
 
 clean:
 	rm -rf .build release
@@ -29,7 +29,7 @@ all:
 
 # Open the built app
 open-app:
-	open release/ClaudeUsageTracker.app
+	open release/ClaudeCodeUsage.app
 
 # Help
 help:

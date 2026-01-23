@@ -66,7 +66,23 @@ actor UsageAPIService {
         }
 
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        // API returns dates with fractional seconds: 2026-01-23T05:59:59.532731+00:00
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            if let date = formatter.date(from: dateString) {
+                return date
+            }
+            // Fallback for dates without fractional seconds
+            let basicFormatter = ISO8601DateFormatter()
+            basicFormatter.formatOptions = [.withInternetDateTime]
+            if let date = basicFormatter.date(from: dateString) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot decode date: \(dateString)")
+        }
 
         do {
             let apiResponse = try decoder.decode(UsageAPIResponse.self, from: data)

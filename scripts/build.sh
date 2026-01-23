@@ -2,7 +2,7 @@
 set -e
 
 # Configuration
-APP_NAME="ClaudeUsageTracker"
+APP_NAME="ClaudeCodeUsage"
 BUNDLE_ID="com.claudeusagetracker.app"
 VERSION="1.0.0"
 
@@ -107,7 +107,7 @@ if [ "$SIGN" = true ]; then
 
     codesign --force --sign "$IDENTITY" \
         --options runtime \
-        --entitlements "$PROJECT_DIR/Resources/ClaudeUsageTracker.entitlements" \
+        --entitlements "$PROJECT_DIR/Resources/ClaudeCodeUsage.entitlements" \
         --timestamp \
         "$APP_BUNDLE"
 
