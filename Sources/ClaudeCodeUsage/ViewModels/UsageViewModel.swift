@@ -9,6 +9,7 @@ final class UsageViewModel {
     private(set) var isLoading = false
     private(set) var lastFetchTime: Date?
     private(set) var agentCount: AgentCount?
+    private(set) var usingManualKey: Bool = false
 
     private let apiService: UsageAPIService
     private let credentialService: CredentialService
@@ -63,6 +64,8 @@ final class UsageViewModel {
         do {
             usageData = try await apiService.fetchUsage()
             lastFetchTime = Date()
+            // Check auth method
+            self.usingManualKey = await credentialService.hasManualAPIKey()
         } catch {
             errorMessage = error.localizedDescription
         }

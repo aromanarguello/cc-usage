@@ -112,6 +112,21 @@ struct UsagePopoverView: View {
                         .foregroundColor(.orange)
                         .font(.caption)
                 }
+
+                if viewModel.usingManualKey {
+                    HStack(spacing: 3) {
+                        Image(systemName: "key.fill")
+                            .font(.caption2)
+                        Text("API Key")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(.orange)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.orange.opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                }
+
                 Text("Updated \(viewModel.timeSinceUpdate)")
                     .font(.caption)
                     .foregroundColor(.secondary)
