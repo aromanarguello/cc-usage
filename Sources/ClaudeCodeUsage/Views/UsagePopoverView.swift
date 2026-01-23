@@ -76,6 +76,34 @@ struct UsagePopoverView: View {
                     color: Color(hex: "F59E0B"),
                     resetPrefix: "Resets"
                 )
+
+                // Active Agents
+                if let agents = viewModel.agentCount, agents.total > 0 {
+                    Divider()
+
+                    HStack {
+                        Image(systemName: "person.2")
+                            .foregroundColor(.secondary)
+                        Text("Active Agents")
+                        Spacer()
+                        Text("\(agents.total)")
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                    }
+                    .padding()
+
+                    HStack {
+                        Text("\(agents.sessions) sessions")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(agents.subagents) subagents")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                }
             } else if viewModel.isLoading {
                 ProgressView()
                     .padding(32)

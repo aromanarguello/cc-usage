@@ -8,8 +8,10 @@ final class UsageViewModel {
     private(set) var errorMessage: String?
     private(set) var isLoading = false
     private(set) var lastFetchTime: Date?
+    private(set) var agentCount: AgentCounter.AgentCount?
 
     private let apiService: UsageAPIService
+    private let agentCounter = AgentCounter()
     private var pollingTask: Task<Void, Never>?
 
     @ObservationIgnored
@@ -43,7 +45,14 @@ final class UsageViewModel {
             errorMessage = error.localizedDescription
         }
 
+        // Also refresh agent count
+        agentCount = await agentCounter.countAgents()
+
         isLoading = false
+    }
+
+    func refreshAgentCount() async {
+        agentCount = await agentCounter.countAgents()
     }
 
     func startPolling() {
