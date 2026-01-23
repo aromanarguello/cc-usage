@@ -35,6 +35,37 @@ Access settings via the dropdown menu:
 - **Refresh interval:** 30s / 60s / 120s
 - **Launch at login:** Toggle
 
+## Distribution
+
+### Building for Release
+
+```bash
+# Simple release build (unsigned)
+make release
+
+# Signed build (requires Developer ID certificate)
+make sign
+
+# Full distribution with notarization
+export APPLE_ID='your@email.com'
+export APPLE_TEAM_ID='YOUR_TEAM_ID'
+export APPLE_APP_PASSWORD='xxxx-xxxx-xxxx-xxxx'
+make all
+```
+
+### Prerequisites for Signing
+
+1. **Developer ID Application certificate** from [Apple Developer](https://developer.apple.com/account/resources/certificates/list)
+2. **App-specific password** from [Apple ID](https://appleid.apple.com/account/manage) (for notarization)
+
+### Build Outputs
+
+| Command | Output |
+|---------|--------|
+| `make release` | `release/ClaudeUsageTracker.app` (unsigned) |
+| `make sign` | `release/ClaudeUsageTracker.app` (signed) |
+| `make all` | `release/ClaudeUsageTracker.app` + `release/ClaudeUsageTracker-1.0.0.dmg` (notarized) |
+
 ## License
 
 MIT
