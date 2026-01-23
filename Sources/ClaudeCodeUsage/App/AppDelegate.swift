@@ -18,4 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let viewModel = UsageViewModel(apiService: apiService, credentialService: credentialService)
         menuBarController = MenuBarController(viewModel: viewModel)
     }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        menuBarController?.showPopover()
+        return false
+    }
 }
