@@ -4,6 +4,7 @@ import Foundation
 struct ProcessInfo: Sendable {
     let pid: Int
     let elapsedSeconds: Int
+    let memoryKB: Int      // Resident Set Size in KB
     let isSubagent: Bool
 }
 
@@ -11,6 +12,7 @@ struct AgentCount: Sendable {
     let sessions: Int      // Main interactive sessions
     let subagents: Int     // Spawned subagents
     let hangingSubagents: [ProcessInfo]  // Subagents running > 3 hours
+    let totalMemoryMB: Int // Total memory used by all agents
     var total: Int { sessions + subagents }
 }
 
@@ -23,8 +25,10 @@ actor AgentCounter {
         let sessions = processes.filter { !$0.isSubagent }.count
         let subagents = processes.filter { $0.isSubagent }.count
         let hangingSubagents = processes.filter { $0.isSubagent && $0.elapsedSeconds > hangingThresholdSeconds }
+        let totalMemoryKB = processes.reduce(0) { $0 + $1.memoryKB }
+        let totalMemoryMB = totalMemoryKB / 1024
 
-        return AgentCount(sessions: sessions, subagents: subagents, hangingSubagents: hangingSubagents)
+        return AgentCount(sessions: sessions, subagents: subagents, hangingSubagents: hangingSubagents, totalMemoryMB: totalMemoryMB)
     }
 
     func killHangingAgents(_ processes: [ProcessInfo]) async -> Int {
@@ -49,13 +53,14 @@ actor AgentCounter {
     }
 
     private func getClaudeProcesses() -> [ProcessInfo] {
-        // Get process list with PID, elapsed time, and command
+        // Get process list with PID, elapsed time, memory (RSS), and command
         // etime format: [[dd-]hh:]mm:ss
+        // rss: resident set size in KB
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/zsh")
         // Match only the actual claude CLI binary, not MCP plugins with "claude" in path
         // Looks for: " claude " or "/claude " (the actual CLI command, not paths containing "claude")
-        task.arguments = ["-c", "ps -eo pid,etime,command | grep -E '( |/)claude( |$)' | grep -v grep | grep -v ClaudeCodeUsage"]
+        task.arguments = ["-c", "ps -eo pid,etime,rss,command | grep -E '( |/)claude( |$)' | grep -v grep | grep -v ClaudeCodeUsage"]
 
         let pipe = Pipe()
         task.standardOutput = pipe
@@ -69,17 +74,18 @@ actor AgentCounter {
             guard let output = String(data: data, encoding: .utf8) else { return [] }
 
             return output.split(separator: "\n").compactMap { line -> ProcessInfo? in
-                let parts = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
-                guard parts.count >= 3,
-                      let pid = Int(parts[0]) else { return nil }
+                let parts = line.split(separator: " ", maxSplits: 3, omittingEmptySubsequences: true)
+                guard parts.count >= 4,
+                      let pid = Int(parts[0]),
+                      let memoryKB = Int(parts[2]) else { return nil }
 
                 let etime = String(parts[1])
-                let command = String(parts[2])
+                let command = String(parts[3])
 
                 let elapsedSeconds = parseEtime(etime)
                 let isSubagent = command.contains("--output-format")
 
-                return ProcessInfo(pid: pid, elapsedSeconds: elapsedSeconds, isSubagent: isSubagent)
+                return ProcessInfo(pid: pid, elapsedSeconds: elapsedSeconds, memoryKB: memoryKB, isSubagent: isSubagent)
             }
         } catch {
             return []

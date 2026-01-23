@@ -282,7 +282,7 @@ struct UsagePopoverView: View {
             }
             .frame(height: 8)
 
-            // Legend
+            // Legend and Memory
             HStack(spacing: 16) {
                 HStack(spacing: 4) {
                     Circle()
@@ -303,9 +303,28 @@ struct UsagePopoverView: View {
                 }
 
                 Spacer()
+
+                // Memory usage
+                HStack(spacing: 4) {
+                    Image(systemName: "memorychip")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Text(formatMemory(agents.totalMemoryMB))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
         }
         .padding()
+    }
+
+    private func formatMemory(_ mb: Int) -> String {
+        if mb >= 1024 {
+            let gb = Double(mb) / 1024.0
+            return String(format: "%.1f GB", gb)
+        } else {
+            return "\(mb) MB"
+        }
     }
 
     @ViewBuilder
