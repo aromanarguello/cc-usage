@@ -12,6 +12,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.close()
         }
 
+        // Request notification permission
+        Task {
+            await NotificationService.shared.requestAuthorization()
+        }
+
         // Setup menu bar
         let credentialService = CredentialService()
         let apiService = UsageAPIService(credentialService: credentialService)
