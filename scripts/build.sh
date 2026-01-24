@@ -4,7 +4,7 @@ set -e
 # Configuration
 APP_NAME="ClaudeCodeUsage"
 BUNDLE_ID="com.claudeusagetracker.app"
-VERSION="1.7.0"
+VERSION="1.7.1"
 
 # Paths
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
