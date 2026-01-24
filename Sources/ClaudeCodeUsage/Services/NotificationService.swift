@@ -1,6 +1,12 @@
 import Foundation
 import UserNotifications
 
+@MainActor
+protocol NotificationServiceDelegate: AnyObject {
+    func notificationServiceDidRequestCleanup(pids: [Int])
+    func notificationServiceDidRequestShowPopover()
+}
+
 actor NotificationService: NSObject {
     static let shared = NotificationService()
 
@@ -12,8 +18,16 @@ actor NotificationService: NSObject {
     private let cleanUpActionID = "CLEAN_UP"
     private let ignoreActionID = "IGNORE"
 
+    nonisolated(unsafe) weak var delegate: NotificationServiceDelegate?
+
     override init() {
         super.init()
+    }
+
+    func setupDelegate() async {
+        await MainActor.run {
+            UNUserNotificationCenter.current().delegate = self
+        }
     }
 
     func requestAuthorization() async {
@@ -91,5 +105,40 @@ actor NotificationService: NSObject {
 
     func resetNotificationState() {
         notifiedOrphanPIDs.removeAll()
+    }
+}
+
+// MARK: - UNUserNotificationCenterDelegate
+extension NotificationService: UNUserNotificationCenterDelegate {
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping @Sendable () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        let pids = userInfo["pids"] as? [Int] ?? []
+        let actionIdentifier = response.actionIdentifier
+
+        Task { @MainActor in
+            switch actionIdentifier {
+            case "CLEAN_UP":
+                self.delegate?.notificationServiceDidRequestCleanup(pids: pids)
+            case UNNotificationDefaultActionIdentifier:
+                // User tapped the notification body
+                self.delegate?.notificationServiceDidRequestShowPopover()
+            default:
+                break
+            }
+            completionHandler()
+        }
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void
+    ) {
+        // Show notification even when app is in foreground
+        completionHandler([.banner, .sound])
     }
 }

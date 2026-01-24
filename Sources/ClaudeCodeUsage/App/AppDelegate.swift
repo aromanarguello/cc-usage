@@ -1,20 +1,22 @@
 import AppKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NotificationServiceDelegate {
     var menuBarController: MenuBarController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Hide from Dock, only show in menu bar
         NSApp.setActivationPolicy(.accessory)
 
-        // Close any windows that might have opened
         for window in NSApp.windows {
             window.close()
         }
 
-        // Request notification permission
+        // Setup notification service
         Task {
             await NotificationService.shared.requestAuthorization()
+            await NotificationService.shared.setupDelegate()
+            await MainActor.run {
+                NotificationService.shared.delegate = self
+            }
         }
 
         // Setup menu bar
@@ -27,5 +29,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         menuBarController?.showPopover()
         return false
+    }
+
+    // MARK: - NotificationServiceDelegate
+
+    func notificationServiceDidRequestCleanup(pids: [Int]) {
+        Task {
+            _ = await menuBarController?.viewModel.killOrphanedSubagents()
+        }
+    }
+
+    func notificationServiceDidRequestShowPopover() {
+        menuBarController?.showPopover()
     }
 }
