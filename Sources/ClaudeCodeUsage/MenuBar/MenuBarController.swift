@@ -101,4 +101,13 @@ final class MenuBarController: ObservableObject {
             Task { await viewModel.refresh() }
         }
     }
+
+    func showPopover() {
+        guard let button = statusItem?.button, let popover = popover else { return }
+
+        if !popover.isShown {
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            Task { await viewModel.refresh() }
+        }
+    }
 }

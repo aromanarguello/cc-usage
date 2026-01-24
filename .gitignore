@@ -13,3 +13,6 @@ release/
 
 # Icon generation temp files
 *.iconset/
+
+# Worktrees
+.worktrees/

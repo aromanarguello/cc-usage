@@ -8,6 +8,8 @@ struct UsagePopoverView: View {
     @State private var showKillConfirmation = false
     @State private var isKillingAgents = false
     @State private var showSettings = false
+    @State private var showKillAllConfirmation = false
+    @State private var isKillingAllAgents = false
 
     // API Key configuration state
     @State private var apiKeyInput = ""
@@ -213,6 +215,19 @@ struct UsagePopoverView: View {
             let count = viewModel.agentCount?.hangingSubagents.count ?? 0
             Text("This will terminate \(count) subagent process\(count == 1 ? "" : "es") that \(count == 1 ? "has" : "have") been running for over 3 hours.")
         }
+        .alert("Kill All Subagents?", isPresented: $showKillAllConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Kill All", role: .destructive) {
+                Task {
+                    isKillingAllAgents = true
+                    _ = await viewModel.killAllSubagents()
+                    isKillingAllAgents = false
+                }
+            }
+        } message: {
+            let count = viewModel.agentCount?.subagents ?? 0
+            Text("This will terminate all \(count) subagent process\(count == 1 ? "" : "es").")
+        }
         .sheet(isPresented: $showSettings) {
             APIKeySettingsView(viewModel: viewModel)
         }
@@ -306,8 +321,8 @@ struct UsagePopoverView: View {
             }
             .frame(height: 8)
 
-            // Legend and Memory
-            HStack(spacing: 16) {
+            // Legend, Memory, and Kill All
+            HStack(spacing: 12) {
                 HStack(spacing: 4) {
                     Circle()
                         .fill(sessionColor)
@@ -336,6 +351,22 @@ struct UsagePopoverView: View {
                     Text(formatMemory(agents.totalMemoryMB))
                         .font(.caption)
                         .foregroundColor(.secondary)
+                }
+
+                // Kill All button (only when subagents > 0)
+                if agents.subagents > 0 {
+                    Button(action: { showKillAllConfirmation = true }) {
+                        if isKillingAllAgents {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                        } else {
+                            Text("Kill All")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isKillingAllAgents)
                 }
             }
         }
