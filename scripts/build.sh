@@ -4,7 +4,7 @@ set -e
 # Configuration
 APP_NAME="ClaudeCodeUsage"
 BUNDLE_ID="com.claudeusagetracker.app"
-VERSION="1.7.1"
+VERSION="1.7.2"
 
 # Paths
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -61,18 +61,27 @@ log_info "Cleaning release directory..."
 rm -rf "$RELEASE_DIR"
 mkdir -p "$RELEASE_DIR"
 
-# Build release binary
+# Build universal binary (ARM64 + x86_64)
 log_info "Building release binary..."
 cd "$PROJECT_DIR"
-swift build -c release
+
+log_info "Building for ARM64..."
+swift build -c release --arch arm64
+
+log_info "Building for x86_64..."
+swift build -c release --arch x86_64
 
 # Create app bundle structure
 log_info "Creating app bundle..."
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
 
-# Copy binary
-cp "$BUILD_DIR/release/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/"
+# Create universal binary with lipo
+log_info "Creating universal binary..."
+lipo -create \
+    "$BUILD_DIR/arm64-apple-macosx/release/$APP_NAME" \
+    "$BUILD_DIR/x86_64-apple-macosx/release/$APP_NAME" \
+    -output "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 
 # Copy Info.plist
 cp "$PROJECT_DIR/Resources/Info.plist" "$APP_BUNDLE/Contents/"
