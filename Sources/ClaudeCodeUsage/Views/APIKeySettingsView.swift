@@ -76,10 +76,23 @@ struct APIKeySettingsView: View {
                     .foregroundColor(.secondary)
             }
 
+            Divider()
+
+            // Version
+            HStack {
+                Text("Version")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+
             Spacer()
         }
         .padding()
-        .frame(width: 300, height: 260)
+        .frame(width: 300, height: 300)
         .alert("Delete API Key?", isPresented: $showDeleteConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
