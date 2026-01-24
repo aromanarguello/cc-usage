@@ -30,9 +30,18 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+
+            Section {
+                HStack {
+                    Text("Version")
+                    Spacer()
+                    Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")
+                        .foregroundColor(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 350, height: 200)
+        .frame(width: 350, height: 230)
         .onAppear {
             launchAtLogin = SMAppService.mainApp.status == .enabled
         }

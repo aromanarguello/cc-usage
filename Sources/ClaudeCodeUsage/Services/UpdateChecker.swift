@@ -1,8 +1,12 @@
 import Foundation
 
 actor UpdateChecker {
-    private let currentVersion = "1.2.0"
+    private let currentVersion: String
     private let githubRepo = "aromanarguello/cc-usage"
+
+    init() {
+        self.currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+    }
 
     struct UpdateResult {
         let updateAvailable: Bool
