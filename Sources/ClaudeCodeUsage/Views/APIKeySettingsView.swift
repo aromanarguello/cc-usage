@@ -3,17 +3,15 @@ import SwiftUI
 struct APIKeySettingsView: View {
     @Bindable var viewModel: UsageViewModel
     @Environment(\.dismiss) private var dismiss
-
-    @State private var hasManualKey = false
-    @State private var isDeleting = false
     @State private var showDeleteConfirmation = false
-    @State private var deleteError: String? = nil
+    @State private var isDeleting = false
+    @AppStorage("orphanNotificationsEnabled") private var orphanNotificationsEnabled: Bool = true
 
     var body: some View {
         VStack(spacing: 16) {
             // Header
             HStack {
-                Text("API Key Settings")
+                Text("Settings")
                     .font(.headline)
                 Spacer()
                 Button(action: { dismiss() }) {
@@ -25,116 +23,82 @@ struct APIKeySettingsView: View {
 
             Divider()
 
-            if hasManualKey {
-                // Manual key is configured
-                VStack(spacing: 12) {
-                    HStack(spacing: 8) {
+            // Auth method section
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Authentication")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                HStack {
+                    if viewModel.usingManualKey {
                         Image(systemName: "key.fill")
                             .foregroundColor(.orange)
-                        Text("Manual API Key")
-                            .fontWeight(.medium)
+                        Text("Using Manual API Key")
+                            .font(.callout)
                         Spacer()
-                        Text("Active")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.green.opacity(0.2))
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                    }
-
-                    Text("You're using a manually configured Anthropic API key stored in Keychain.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if let error = deleteError {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                    }
-
-                    Button(action: { showDeleteConfirmation = true }) {
-                        HStack {
+                        Button(action: { showDeleteConfirmation = true }) {
                             if isDeleting {
                                 ProgressView()
                                     .scaleEffect(0.6)
                             } else {
-                                Image(systemName: "trash")
+                                Text("Delete")
+                                    .foregroundColor(.red)
                             }
-                            Text("Remove API Key")
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(Color.red.opacity(0.15))
-                        .foregroundColor(.red)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isDeleting)
-                }
-            } else {
-                // Using OAuth
-                VStack(spacing: 12) {
-                    HStack(spacing: 8) {
+                        .buttonStyle(.plain)
+                        .disabled(isDeleting)
+                    } else {
                         Image(systemName: "person.badge.key.fill")
-                            .foregroundColor(.blue)
-                        Text("Claude Code OAuth")
-                            .fontWeight(.medium)
-                        Spacer()
-                        Text("Active")
-                            .font(.caption)
                             .foregroundColor(.green)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.green.opacity(0.2))
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                        Text("Using Claude Code OAuth")
+                            .font(.callout)
+                        Spacer()
                     }
-
-                    Text("Using credentials from Claude Code. No manual configuration needed.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .padding(12)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+
+            Divider()
+
+            // Notifications section
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Notifications")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Toggle("Orphan agent alerts", isOn: $orphanNotificationsEnabled)
+                    .toggleStyle(.switch)
+
+                Text("Notify when subagents outlive their parent session")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             Spacer()
         }
         .padding()
-        .frame(width: 280, height: 200)
-        .background(.ultraThinMaterial)
-        .task {
-            hasManualKey = await viewModel.isUsingManualAPIKey
-        }
-        .alert("Remove API Key?", isPresented: $showDeleteConfirmation) {
+        .frame(width: 300, height: 260)
+        .alert("Delete API Key?", isPresented: $showDeleteConfirmation) {
             Button("Cancel", role: .cancel) { }
-            Button("Remove", role: .destructive) {
-                deleteAPIKey()
+            Button("Delete", role: .destructive) {
+                Task {
+                    isDeleting = true
+                    try? await viewModel.deleteManualAPIKey()
+                    isDeleting = false
+                    await viewModel.refresh()
+                }
             }
         } message: {
-            Text("This will remove your manual API key. The app will try to use Claude Code OAuth credentials instead.")
+            Text("The app will try to use Claude Code OAuth credentials instead.")
         }
     }
+}
 
-    private func deleteAPIKey() {
-        isDeleting = true
-        deleteError = nil
-
-        Task {
-            do {
-                try await viewModel.deleteManualAPIKey()
-                await MainActor.run {
-                    hasManualKey = false
-                    isDeleting = false
-                }
-                // Refresh to attempt OAuth
-                await viewModel.refresh()
-            } catch {
-                await MainActor.run {
-                    deleteError = "Failed to remove: \(error.localizedDescription)"
-                    isDeleting = false
-                }
-            }
-        }
-    }
+#Preview {
+    let credentialService = CredentialService()
+    let apiService = UsageAPIService(credentialService: credentialService)
+    let viewModel = UsageViewModel(apiService: apiService, credentialService: credentialService)
+    return APIKeySettingsView(viewModel: viewModel)
 }

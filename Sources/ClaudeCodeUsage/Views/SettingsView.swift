@@ -3,6 +3,7 @@ import ServiceManagement
 
 struct SettingsView: View {
     @AppStorage("refreshInterval") private var refreshInterval: Double = 60
+    @AppStorage("orphanNotificationsEnabled") private var orphanNotificationsEnabled: Bool = true
     @State private var launchAtLogin = false
 
     var body: some View {
@@ -21,9 +22,17 @@ struct SettingsView: View {
                         setLaunchAtLogin(newValue)
                     }
             }
+
+            Section {
+                Toggle("Orphan notifications", isOn: $orphanNotificationsEnabled)
+            } footer: {
+                Text("Notify when subagents are left running after their parent session ends")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 350, height: 150)
+        .frame(width: 350, height: 200)
         .onAppear {
             launchAtLogin = SMAppService.mainApp.status == .enabled
         }
