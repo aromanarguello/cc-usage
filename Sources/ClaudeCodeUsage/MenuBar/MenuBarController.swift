@@ -10,9 +10,11 @@ final class MenuBarController: ObservableObject {
     nonisolated(unsafe) private var updateTask: Task<Void, Never>?
 
     let viewModel: UsageViewModel
+    let apiService: UsageAPIService
 
-    init(viewModel: UsageViewModel) {
+    init(viewModel: UsageViewModel, apiService: UsageAPIService) {
         self.viewModel = viewModel
+        self.apiService = apiService
         setupStatusItem()
         setupPopover()
         setupEventMonitor()
@@ -43,7 +45,7 @@ final class MenuBarController: ObservableObject {
         popover?.contentSize = NSSize(width: 320, height: 340)
         popover?.behavior = .transient
         popover?.contentViewController = NSHostingController(
-            rootView: UsagePopoverView(viewModel: viewModel)
+            rootView: UsagePopoverView(viewModel: viewModel, apiService: apiService)
         )
     }
 

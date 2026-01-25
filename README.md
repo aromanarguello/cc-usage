@@ -11,10 +11,14 @@ A native macOS menu bar app for tracking Claude Code usage limits in real-time.
 - Weekly usage tracking
 - Automatic polling with configurable intervals
 - Launch at login support
+- **Agent Detection:** Shows active Claude Code sessions and sub-agents
+- **Orphan Detection:** Identifies orphaned sub-agents (running without a parent session)
+- **Kill Orphans:** One-click termination of orphaned agents to free up resources
 
 ## Requirements
 
 - macOS 14.0+ (Sonoma)
+- Apple Silicon or Intel Mac (universal binary)
 - Claude Code CLI installed and authenticated
 
 ## Building
@@ -66,7 +70,7 @@ make all
 |---------|--------|
 | `make release` | `release/ClaudeCodeUsage.app` (unsigned) |
 | `make sign` | `release/ClaudeCodeUsage.app` (signed) |
-| `make all` | `release/ClaudeCodeUsage.app` + `release/ClaudeCodeUsage-1.0.0.dmg` (notarized) |
+| `make all` | `release/ClaudeCodeUsage.app` + `release/ClaudeCodeUsage.dmg` (notarized) |
 
 ## License
 

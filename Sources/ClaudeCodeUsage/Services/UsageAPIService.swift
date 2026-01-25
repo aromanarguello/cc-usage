@@ -111,6 +111,36 @@ actor UsageAPIService {
         }
     }
 
+    /// Fetches raw JSON response for debugging/discovery
+    func fetchRawResponse() async throws -> String {
+        let accessToken = try await credentialService.getAccessToken()
+
+        guard let url = URL(string: baseURL) else {
+            throw APIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 0, nil)
+        }
+
+        // Pretty print JSON
+        if let json = try? JSONSerialization.jsonObject(with: data),
+           let prettyData = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted),
+           let prettyString = String(data: prettyData, encoding: .utf8) {
+            return prettyString
+        }
+
+        return String(data: data, encoding: .utf8) ?? "Unable to decode response"
+    }
+
     /// Spawns the Claude CLI to trigger its internal token refresh mechanism
     private func triggerTokenRefresh() async -> Bool {
         // Find claude binary - try common locations
