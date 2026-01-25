@@ -73,6 +73,9 @@ struct UsageData: Sendable {
 struct UsageAPIResponse: Decodable {
     let fiveHour: UsageWindowResponse
     let sevenDay: UsageWindowResponse
+    let sevenDaySonnet: UsageWindowResponse?
+    let sevenDayOpus: UsageWindowResponse?
+    let extraUsage: ExtraUsageResponse?
 
     struct UsageWindowResponse: Decodable {
         let utilization: Double
@@ -84,9 +87,26 @@ struct UsageAPIResponse: Decodable {
         }
     }
 
+    struct ExtraUsageResponse: Decodable {
+        let utilization: Double
+        let monthlyLimit: Int
+        let usedCredits: Int
+        let isEnabled: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case utilization
+            case monthlyLimit = "monthly_limit"
+            case usedCredits = "used_credits"
+            case isEnabled = "is_enabled"
+        }
+    }
+
     enum CodingKeys: String, CodingKey {
         case fiveHour = "five_hour"
         case sevenDay = "seven_day"
+        case sevenDaySonnet = "seven_day_sonnet"
+        case sevenDayOpus = "seven_day_opus"
+        case extraUsage = "extra_usage"
     }
 
     func toUsageData() -> UsageData {
@@ -99,6 +119,26 @@ struct UsageAPIResponse: Decodable {
                 utilization: sevenDay.utilization / 100.0,  // API returns percentage, convert to decimal
                 resetsAt: sevenDay.resetsAt
             ),
+            sevenDaySonnet: sevenDaySonnet.map { response in
+                UsageData.UsageWindow(
+                    utilization: response.utilization / 100.0,
+                    resetsAt: response.resetsAt
+                )
+            },
+            sevenDayOpus: sevenDayOpus.map { response in
+                UsageData.UsageWindow(
+                    utilization: response.utilization / 100.0,
+                    resetsAt: response.resetsAt
+                )
+            },
+            extraUsage: extraUsage.map { response in
+                UsageData.ExtraUsage(
+                    utilization: response.utilization,
+                    usedCredits: response.usedCredits,
+                    monthlyLimit: response.monthlyLimit,
+                    isEnabled: response.isEnabled
+                )
+            },
             subscription: "Max",  // Could be read from keychain if needed
             lastUpdated: Date()
         )
