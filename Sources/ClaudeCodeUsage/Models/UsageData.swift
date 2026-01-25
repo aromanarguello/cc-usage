@@ -3,6 +3,9 @@ import Foundation
 struct UsageData: Sendable {
     let fiveHour: UsageWindow
     let sevenDay: UsageWindow
+    let sevenDaySonnet: UsageWindow?
+    let sevenDayOpus: UsageWindow?
+    let extraUsage: ExtraUsage?
     let subscription: String
     let lastUpdated: Date
 
@@ -57,6 +60,9 @@ struct UsageData: Sendable {
     static let placeholder = UsageData(
         fiveHour: UsageWindow(utilization: 0.20, resetsAt: Date().addingTimeInterval(4 * 3600 + 54 * 60)),
         sevenDay: UsageWindow(utilization: 0.51, resetsAt: Date().addingTimeInterval(5 * 24 * 3600)),
+        sevenDaySonnet: UsageWindow(utilization: 0.25, resetsAt: Date().addingTimeInterval(5 * 24 * 3600)),
+        sevenDayOpus: nil,
+        extraUsage: ExtraUsage(utilization: 44.9, usedCredits: 898, monthlyLimit: 2000, isEnabled: true),
         subscription: "Pro",
         lastUpdated: Date()
     )
