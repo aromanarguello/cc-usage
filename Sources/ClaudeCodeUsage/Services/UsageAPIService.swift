@@ -36,6 +36,9 @@ actor UsageAPIService {
         do {
             return try await performFetch()
         } catch APIError.unauthorized {
+            // Invalidate cached credentials - they're no longer valid
+            await credentialService.invalidateCache()
+
             // Try to refresh token by spawning CLI, then retry once
             if !hasAttemptedRefresh {
                 hasAttemptedRefresh = true

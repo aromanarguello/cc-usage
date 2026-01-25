@@ -53,15 +53,11 @@ actor CredentialService {
     private let manualKeyAccount = "anthropic-api-key"
     private let accessDeniedKey = "keychainAccessDenied"
 
-    // Token cache to reduce keychain access frequency
+    // Token cache - cached until invalidated (on 401) or app restart
     private var cachedToken: String?
-    private var tokenCacheTime: Date?
-    private let tokenCacheTTL: TimeInterval = 300 // 5 minutes
 
-    // Manual API key cache to reduce keychain access frequency
+    // Manual API key cache - cached until invalidated or app restart
     private var cachedManualKey: String?
-    private var manualKeyCacheTime: Date?
-    private let manualKeyCacheTTL: TimeInterval = 300 // 5 minutes
 
     // Track if keychain access was denied (persisted to UserDefaults)
     private var lastAccessDenied: Bool {
@@ -109,10 +105,8 @@ actor CredentialService {
             // Other errors, continue to try OAuth
         }
 
-        // 3. Check OAuth token cache
-        if let cached = cachedToken,
-           let cacheTime = tokenCacheTime,
-           Date().timeIntervalSince(cacheTime) < tokenCacheTTL {
+        // 3. Check OAuth token cache (cached until 401 or app restart)
+        if let cached = cachedToken {
             return cached
         }
 
@@ -121,7 +115,6 @@ actor CredentialService {
             let token = try getClaudeCodeToken()
             // Cache the result
             cachedToken = token
-            tokenCacheTime = Date()
             return token
         } catch let error as CredentialError {
             // Track access denied state
@@ -135,9 +128,7 @@ actor CredentialService {
     /// Invalidates the token cache, forcing a fresh keychain read on next access
     func invalidateCache() {
         cachedToken = nil
-        tokenCacheTime = nil
         cachedManualKey = nil
-        manualKeyCacheTime = nil
     }
 
     /// Gets the Claude Code OAuth token from keychain
@@ -226,7 +217,6 @@ actor CredentialService {
 
         // Update cache with newly saved key
         cachedManualKey = trimmed
-        manualKeyCacheTime = Date()
 
         // Clear access denied state - user now has a valid credential
         lastAccessDenied = false
@@ -234,10 +224,8 @@ actor CredentialService {
 
     /// Retrieves the manual API key from keychain
     func getManualAPIKey() throws -> String {
-        // Check cache first
-        if let cached = cachedManualKey,
-           let cacheTime = manualKeyCacheTime,
-           Date().timeIntervalSince(cacheTime) < manualKeyCacheTTL {
+        // Check cache first (cached until 401 or app restart)
+        if let cached = cachedManualKey {
             return cached
         }
 
@@ -270,7 +258,6 @@ actor CredentialService {
 
         // Cache the result
         cachedManualKey = key
-        manualKeyCacheTime = Date()
 
         return key
     }
@@ -291,7 +278,6 @@ actor CredentialService {
 
         // Clear the cache
         cachedManualKey = nil
-        manualKeyCacheTime = nil
     }
 
     /// Checks if a manual API key is configured
