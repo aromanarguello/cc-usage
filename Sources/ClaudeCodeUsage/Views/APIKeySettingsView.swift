@@ -129,7 +129,7 @@ struct APIKeySettingsView: View {
             Spacer()
         }
         .padding()
-        .frame(width: 300, height: 380)
+        .frame(width: 300, height: 420)
         .alert("Delete API Key?", isPresented: $showDeleteConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
