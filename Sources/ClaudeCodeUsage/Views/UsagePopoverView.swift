@@ -3,6 +3,7 @@ import AppKit
 
 struct UsagePopoverView: View {
     @Bindable var viewModel: UsageViewModel
+    let apiService: UsageAPIService
     @State private var isCheckingUpdate = false
     @State private var updateAlert: UpdateAlertType? = nil
     @State private var showKillConfirmation = false
@@ -86,6 +87,31 @@ struct UsagePopoverView: View {
                     color: Color(hex: "F59E0B"),
                     resetPrefix: "Resets"
                 )
+
+                // Model-specific quotas
+                if let sonnet = data.sevenDaySonnet {
+                    Divider()
+
+                    usageSection(
+                        icon: "sparkles",
+                        title: "Weekly (Sonnet)",
+                        window: sonnet,
+                        color: Color(hex: "A855F7"),
+                        resetPrefix: "Resets"
+                    )
+                }
+
+                if let opus = data.sevenDayOpus {
+                    Divider()
+
+                    usageSection(
+                        icon: "star.fill",
+                        title: "Weekly (Opus)",
+                        window: opus,
+                        color: Color(hex: "EC4899"),
+                        resetPrefix: "Resets"
+                    )
+                }
 
                 // Active Agents
                 if let agents = viewModel.agentCount, agents.total > 0 {
@@ -229,7 +255,7 @@ struct UsagePopoverView: View {
             Text("This will terminate all \(count) subagent process\(count == 1 ? "" : "es").")
         }
         .sheet(isPresented: $showSettings) {
-            APIKeySettingsView(viewModel: viewModel)
+            APIKeySettingsView(viewModel: viewModel, apiService: apiService)
         }
     }
 
@@ -541,5 +567,5 @@ struct UsagePopoverView: View {
     let credentialService = CredentialService()
     let apiService = UsageAPIService(credentialService: credentialService)
     let viewModel = UsageViewModel(apiService: apiService, credentialService: credentialService)
-    return UsagePopoverView(viewModel: viewModel)
+    return UsagePopoverView(viewModel: viewModel, apiService: apiService)
 }
