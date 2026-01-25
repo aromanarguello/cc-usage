@@ -113,6 +113,13 @@ struct UsagePopoverView: View {
                     )
                 }
 
+                // Extra Usage (monthly spending)
+                if let extraUsage = data.extraUsage, extraUsage.isEnabled {
+                    Divider()
+
+                    extraUsageSection(extraUsage: extraUsage)
+                }
+
                 // Active Agents
                 if let agents = viewModel.agentCount, agents.total > 0 {
                     Divider()
@@ -433,6 +440,28 @@ struct UsagePopoverView: View {
         }
         .padding()
         .background(Color.orange.opacity(0.15))
+    }
+
+    @ViewBuilder
+    private func extraUsageSection(extraUsage: UsageData.ExtraUsage) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center) {
+                Image(systemName: "dollarsign.circle")
+                    .foregroundColor(.secondary)
+                Text("Extra Usage")
+                Spacer()
+                Text("\(extraUsage.percentage)%")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+            }
+
+            UsageBarView(progress: extraUsage.utilization / 100.0, color: Color(hex: "10B981"))
+
+            Text("\(extraUsage.usedUSD) / \(extraUsage.limitUSD) this month")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding()
     }
 
     // MARK: - API Key Configuration
