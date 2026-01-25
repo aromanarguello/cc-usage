@@ -33,6 +33,27 @@ struct UsageData: Sendable {
         }
     }
 
+    struct ExtraUsage: Sendable {
+        let utilization: Double      // 0-100 percentage
+        let usedCredits: Int         // in cents
+        let monthlyLimit: Int        // in cents
+        let isEnabled: Bool
+
+        var percentage: Int {
+            Int(utilization)
+        }
+
+        var usedUSD: String {
+            let dollars = Double(usedCredits) / 100.0
+            return String(format: "$%.2f", dollars)
+        }
+
+        var limitUSD: String {
+            let dollars = Double(monthlyLimit) / 100.0
+            return String(format: "$%.2f", dollars)
+        }
+    }
+
     static let placeholder = UsageData(
         fiveHour: UsageWindow(utilization: 0.20, resetsAt: Date().addingTimeInterval(4 * 3600 + 54 * 60)),
         sevenDay: UsageWindow(utilization: 0.51, resetsAt: Date().addingTimeInterval(5 * 24 * 3600)),
