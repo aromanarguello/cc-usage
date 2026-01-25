@@ -58,6 +58,11 @@ actor CredentialService {
     private var tokenCacheTime: Date?
     private let tokenCacheTTL: TimeInterval = 300 // 5 minutes
 
+    // Manual API key cache to reduce keychain access frequency
+    private var cachedManualKey: String?
+    private var manualKeyCacheTime: Date?
+    private let manualKeyCacheTTL: TimeInterval = 300 // 5 minutes
+
     // Track if keychain access was denied (persisted to UserDefaults)
     private var lastAccessDenied: Bool {
         get { UserDefaults.standard.bool(forKey: accessDeniedKey) }
@@ -131,6 +136,8 @@ actor CredentialService {
     func invalidateCache() {
         cachedToken = nil
         tokenCacheTime = nil
+        cachedManualKey = nil
+        manualKeyCacheTime = nil
     }
 
     /// Gets the Claude Code OAuth token from keychain
@@ -217,12 +224,23 @@ actor CredentialService {
             throw CredentialError.keychainError(status)
         }
 
+        // Update cache with newly saved key
+        cachedManualKey = trimmed
+        manualKeyCacheTime = Date()
+
         // Clear access denied state - user now has a valid credential
         lastAccessDenied = false
     }
 
     /// Retrieves the manual API key from keychain
     func getManualAPIKey() throws -> String {
+        // Check cache first
+        if let cached = cachedManualKey,
+           let cacheTime = manualKeyCacheTime,
+           Date().timeIntervalSince(cacheTime) < manualKeyCacheTTL {
+            return cached
+        }
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: manualKeyService,
@@ -250,6 +268,10 @@ actor CredentialService {
             throw CredentialError.invalidData
         }
 
+        // Cache the result
+        cachedManualKey = key
+        manualKeyCacheTime = Date()
+
         return key
     }
 
@@ -266,6 +288,10 @@ actor CredentialService {
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw CredentialError.keychainError(status)
         }
+
+        // Clear the cache
+        cachedManualKey = nil
+        manualKeyCacheTime = nil
     }
 
     /// Checks if a manual API key is configured
