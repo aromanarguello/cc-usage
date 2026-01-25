@@ -74,6 +74,16 @@ actor CredentialService {
         lastAccessDenied = false
     }
 
+    /// Checks if an OSStatus indicates keychain access was denied by user
+    private func isAccessDeniedStatus(_ status: OSStatus) -> Bool {
+        // errSecAuthFailed (-25293): Authentication failed (user denied)
+        // errSecInteractionNotAllowed (-25308): User interaction not allowed
+        // errSecUserCanceled (-128): User canceled the operation
+        status == errSecAuthFailed ||
+        status == errSecInteractionNotAllowed ||
+        status == errSecUserCanceled
+    }
+
     /// Attempts to get an access token, checking manual API key first, then Claude Code OAuth
     func getAccessToken() throws -> String {
         // 1. If keychain access was previously denied, don't try ANY keychain access
@@ -140,12 +150,7 @@ actor CredentialService {
                 throw CredentialError.notFound
             }
             // Detect user denial of keychain access
-            // errSecAuthFailed (-25293): Authentication failed (user denied)
-            // errSecInteractionNotAllowed (-25308): User interaction not allowed
-            // errSecUserCanceled (-128): User canceled the operation
-            if status == errSecAuthFailed ||
-               status == errSecInteractionNotAllowed ||
-               status == errSecUserCanceled {
+            if isAccessDeniedStatus(status) {
                 throw CredentialError.accessDenied
             }
             throw CredentialError.keychainError(status)
@@ -234,9 +239,7 @@ actor CredentialService {
                 throw CredentialError.notFound
             }
             // Detect user denial of keychain access
-            if status == errSecAuthFailed ||
-               status == errSecInteractionNotAllowed ||
-               status == errSecUserCanceled {
+            if isAccessDeniedStatus(status) {
                 throw CredentialError.accessDenied
             }
             throw CredentialError.keychainError(status)
