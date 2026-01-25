@@ -7,6 +7,7 @@ enum CredentialError: Error, LocalizedError {
     case keychainError(OSStatus)
     case tokenNotFound
     case invalidAPIKeyFormat
+    case accessDenied
 
     var errorDescription: String? {
         switch self {
@@ -20,15 +21,27 @@ enum CredentialError: Error, LocalizedError {
             return "OAuth token not found in credentials."
         case .invalidAPIKeyFormat:
             return "Invalid API key format."
+        case .accessDenied:
+            return "Keychain access denied. Configure a manual API key in Settings."
         }
     }
 
     /// Whether this error can be resolved by manual API key entry
     var canUseManualKey: Bool {
         switch self {
-        case .notFound, .invalidData, .tokenNotFound:
+        case .notFound, .invalidData, .tokenNotFound, .accessDenied:
             return true
         case .keychainError, .invalidAPIKeyFormat:
+            return false
+        }
+    }
+
+    /// Whether this error indicates keychain access was denied by the user
+    var isAccessDenied: Bool {
+        switch self {
+        case .accessDenied:
+            return true
+        default:
             return false
         }
     }
@@ -38,20 +51,76 @@ actor CredentialService {
     private let serviceName = "Claude Code-credentials"
     private let manualKeyService = "ClaudeCodeUsage-apiKey"
     private let manualKeyAccount = "anthropic-api-key"
+    private let accessDeniedKey = "keychainAccessDenied"
 
-    /// Attempts to get an access token, trying Claude Code credentials first, then manual API key
+    // Token cache to reduce keychain access frequency
+    private var cachedToken: String?
+    private var tokenCacheTime: Date?
+    private let tokenCacheTTL: TimeInterval = 300 // 5 minutes
+
+    // Track if keychain access was denied (persisted to UserDefaults)
+    private var lastAccessDenied: Bool {
+        get { UserDefaults.standard.bool(forKey: accessDeniedKey) }
+        set { UserDefaults.standard.set(newValue, forKey: accessDeniedKey) }
+    }
+
+    /// Returns true if the last keychain access attempt was denied
+    func wasAccessDenied() -> Bool {
+        return lastAccessDenied
+    }
+
+    /// Clears the access denied state (for retry button)
+    func clearAccessDeniedState() {
+        lastAccessDenied = false
+    }
+
+    /// Attempts to get an access token, checking manual API key first, then Claude Code OAuth
     func getAccessToken() throws -> String {
-        // First, try to get Claude Code's OAuth token
+        // 1. If keychain access was previously denied, don't try ANY keychain access
+        if lastAccessDenied {
+            throw CredentialError.accessDenied
+        }
+
+        // 2. Try manual API key first - if user configured one, use it
         do {
-            return try getClaudeCodeToken()
-        } catch {
-            // If that fails, try manual API key as fallback
-            if let manualKey = try? getManualAPIKey() {
-                return manualKey
+            return try getManualAPIKey()
+        } catch let error as CredentialError {
+            if error.isAccessDenied {
+                lastAccessDenied = true
+                throw error
             }
-            // Re-throw the original error if no manual key
+            // For notFound or other errors, continue to try OAuth
+        } catch {
+            // Other errors, continue to try OAuth
+        }
+
+        // 3. Check OAuth token cache
+        if let cached = cachedToken,
+           let cacheTime = tokenCacheTime,
+           Date().timeIntervalSince(cacheTime) < tokenCacheTTL {
+            return cached
+        }
+
+        // 4. Try OAuth token from keychain
+        do {
+            let token = try getClaudeCodeToken()
+            // Cache the result
+            cachedToken = token
+            tokenCacheTime = Date()
+            return token
+        } catch let error as CredentialError {
+            // Track access denied state
+            if error.isAccessDenied {
+                lastAccessDenied = true
+            }
             throw error
         }
+    }
+
+    /// Invalidates the token cache, forcing a fresh keychain read on next access
+    func invalidateCache() {
+        cachedToken = nil
+        tokenCacheTime = nil
     }
 
     /// Gets the Claude Code OAuth token from keychain
@@ -69,6 +138,15 @@ actor CredentialService {
         guard status == errSecSuccess else {
             if status == errSecItemNotFound {
                 throw CredentialError.notFound
+            }
+            // Detect user denial of keychain access
+            // errSecAuthFailed (-25293): Authentication failed (user denied)
+            // errSecInteractionNotAllowed (-25308): User interaction not allowed
+            // errSecUserCanceled (-128): User canceled the operation
+            if status == errSecAuthFailed ||
+               status == errSecInteractionNotAllowed ||
+               status == errSecUserCanceled {
+                throw CredentialError.accessDenied
             }
             throw CredentialError.keychainError(status)
         }
@@ -133,6 +211,9 @@ actor CredentialService {
         guard status == errSecSuccess else {
             throw CredentialError.keychainError(status)
         }
+
+        // Clear access denied state - user now has a valid credential
+        lastAccessDenied = false
     }
 
     /// Retrieves the manual API key from keychain
@@ -151,6 +232,12 @@ actor CredentialService {
         guard status == errSecSuccess else {
             if status == errSecItemNotFound {
                 throw CredentialError.notFound
+            }
+            // Detect user denial of keychain access
+            if status == errSecAuthFailed ||
+               status == errSecInteractionNotAllowed ||
+               status == errSecUserCanceled {
+                throw CredentialError.accessDenied
             }
             throw CredentialError.keychainError(status)
         }
