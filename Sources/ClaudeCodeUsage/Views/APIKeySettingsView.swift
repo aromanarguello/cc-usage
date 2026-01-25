@@ -4,8 +4,6 @@ struct APIKeySettingsView: View {
     @Bindable var viewModel: UsageViewModel
     let apiService: UsageAPIService
     @Environment(\.dismiss) private var dismiss
-    @State private var showDeleteConfirmation = false
-    @State private var isDeleting = false
     @State private var isFetchingDebug = false
     @State private var debugCopied = false
     @AppStorage("orphanNotificationsEnabled") private var orphanNotificationsEnabled: Bool = true
@@ -33,34 +31,19 @@ struct APIKeySettingsView: View {
                     .fontWeight(.medium)
 
                 HStack {
-                    if viewModel.usingManualKey {
-                        Image(systemName: "key.fill")
-                            .foregroundColor(.orange)
-                        Text("Using Manual API Key")
-                            .font(.callout)
-                        Spacer()
-                        Button(action: { showDeleteConfirmation = true }) {
-                            if isDeleting {
-                                ProgressView()
-                                    .scaleEffect(0.6)
-                            } else {
-                                Text("Delete")
-                                    .foregroundColor(.red)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isDeleting)
-                    } else {
-                        Image(systemName: "person.badge.key.fill")
-                            .foregroundColor(.green)
-                        Text("Using Claude Code OAuth")
-                            .font(.callout)
-                        Spacer()
-                    }
+                    Image(systemName: "person.badge.key.fill")
+                        .foregroundColor(.green)
+                    Text("Claude Code OAuth")
+                        .font(.callout)
+                    Spacer()
                 }
                 .padding(12)
                 .background(Color(nsColor: .controlBackgroundColor))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                Text("Credentials are read from Claude Code CLI")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             Divider()
@@ -129,20 +112,7 @@ struct APIKeySettingsView: View {
             Spacer()
         }
         .padding()
-        .frame(width: 300, height: 420)
-        .alert("Delete API Key?", isPresented: $showDeleteConfirmation) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                Task {
-                    isDeleting = true
-                    try? await viewModel.deleteManualAPIKey()
-                    isDeleting = false
-                    await viewModel.refresh()
-                }
-            }
-        } message: {
-            Text("The app will try to use Claude Code OAuth credentials instead.")
-        }
+        .frame(width: 300, height: 380)
     }
 
     private func fetchAndCopyRawResponse() {

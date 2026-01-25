@@ -18,21 +18,11 @@ enum CredentialError: Error, LocalizedError {
         case .keychainError(let status):
             return "Keychain error: \(status)"
         case .tokenNotFound:
-            return "OAuth token not found in credentials."
+            return "OAuth token not found. Run `claude` in terminal to authenticate."
         case .invalidAPIKeyFormat:
             return "Invalid API key format."
         case .accessDenied:
-            return "Keychain access denied. Configure a manual API key in Settings."
-        }
-    }
-
-    /// Whether this error can be resolved by manual API key entry
-    var canUseManualKey: Bool {
-        switch self {
-        case .notFound, .invalidData, .tokenNotFound, .accessDenied:
-            return true
-        case .keychainError, .invalidAPIKeyFormat:
-            return false
+            return "Keychain access denied. Click Retry and allow access when prompted."
         }
     }
 
@@ -85,32 +75,19 @@ actor CredentialService {
         status == errSecUserCanceled
     }
 
-    /// Attempts to get an access token, checking manual API key first, then Claude Code OAuth
+    /// Attempts to get an OAuth access token from Claude Code CLI credentials
     func getAccessToken() throws -> String {
-        // 1. If keychain access was previously denied, don't try ANY keychain access
+        // 1. If keychain access was previously denied, don't try keychain access
         if lastAccessDenied {
             throw CredentialError.accessDenied
         }
 
-        // 2. Try manual API key first - if user configured one, use it
-        do {
-            return try getManualAPIKey()
-        } catch let error as CredentialError {
-            if error.isAccessDenied {
-                lastAccessDenied = true
-                throw error
-            }
-            // For notFound or other errors, continue to try OAuth
-        } catch {
-            // Other errors, continue to try OAuth
-        }
-
-        // 3. Check OAuth token cache (cached until 401 or app restart)
+        // 2. Check OAuth token cache (cached until 401 or app restart)
         if let cached = cachedToken {
             return cached
         }
 
-        // 4. Try OAuth token from keychain
+        // 3. Try OAuth token from keychain
         do {
             let token = try getClaudeCodeToken()
             // Cache the result

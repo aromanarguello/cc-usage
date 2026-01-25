@@ -12,13 +12,6 @@ struct UsagePopoverView: View {
     @State private var showKillAllConfirmation = false
     @State private var isKillingAllAgents = false
 
-    // API Key configuration state
-    @State private var apiKeyInput = ""
-    @State private var isShowingKey = false
-    @State private var isSavingKey = false
-    @State private var keyError: String? = nil
-    @State private var showKeySaved = false
-
     private let updateChecker = UpdateChecker()
 
     enum UpdateAlertType: Identifiable {
@@ -64,7 +57,7 @@ struct UsagePopoverView: View {
 
             Divider()
 
-            if viewModel.keychainAccessDenied && !viewModel.usingManualKey && viewModel.usageData == nil {
+            if viewModel.keychainAccessDenied && viewModel.usageData == nil {
                 // Keychain access denied - show specific guidance
                 keychainDeniedView()
             } else if let error = viewModel.errorMessage, viewModel.usageData == nil {
@@ -149,20 +142,6 @@ struct UsagePopoverView: View {
                     Image(systemName: "exclamationmark.circle")
                         .foregroundColor(.orange)
                         .font(.caption)
-                }
-
-                if viewModel.usingManualKey {
-                    HStack(spacing: 3) {
-                        Image(systemName: "key.fill")
-                            .font(.caption2)
-                        Text("API Key")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(.orange)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Color.orange.opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
                 }
 
                 Text("Updated \(viewModel.timeSinceUpdate)")
@@ -472,105 +451,98 @@ struct UsagePopoverView: View {
     @ViewBuilder
     private func keychainDeniedView() -> some View {
         VStack(spacing: 16) {
-            // Lock icon
-            Image(systemName: "lock.shield")
-                .font(.system(size: 36))
-                .foregroundColor(.orange)
+            // Icon with subtle background
+            ZStack {
+                Circle()
+                    .fill(Color.orange.opacity(0.15))
+                    .frame(width: 56, height: 56)
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.orange)
+            }
 
-            // Message
-            VStack(spacing: 8) {
-                Text("Keychain Access Denied")
+            // Title and explanation
+            VStack(spacing: 6) {
+                Text("Access Blocked")
                     .font(.callout)
-                    .fontWeight(.medium)
+                    .fontWeight(.semibold)
 
-                Text("macOS is blocking access to Claude Code credentials. Enter your API key below instead.")
+                Text("macOS denied access to your Claude Code credentials stored in Keychain.")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            // API Key input field
+            // Info box explaining what this means
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Group {
-                        if isShowingKey {
-                            TextField("sk-ant-...", text: $apiKeyInput)
-                        } else {
-                            SecureField("sk-ant-...", text: $apiKeyInput)
-                        }
-                    }
-                    .textFieldStyle(.plain)
-                    .font(.system(.body, design: .monospaced))
-                    .padding(8)
-                    .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(keyError != nil ? Color.red.opacity(0.8) : Color.gray.opacity(0.3), lineWidth: 1)
-                    )
-
-                    // Reveal toggle
-                    Button(action: { isShowingKey.toggle() }) {
-                        Image(systemName: isShowingKey ? "eye.slash" : "eye")
-                            .foregroundColor(.secondary)
-                            .frame(width: 24, height: 24)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                // Error message
-                if let error = keyError {
-                    Text(error)
-                        .font(.caption2)
-                        .foregroundColor(.red)
-                }
-            }
-
-            // Save button
-            Button(action: saveAPIKey) {
                 HStack(spacing: 6) {
-                    if isSavingKey {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                    } else if showKeySaved {
-                        Image(systemName: "checkmark")
-                            .foregroundColor(.white)
-                    }
-                    Text(showKeySaved ? "Saved!" : "Save API Key")
+                    Image(systemName: "info.circle.fill")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    Text("Why this happens")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+
+                Text("This app reads OAuth tokens from Claude Code CLI to show your usage. When you click \"Don't Allow\" on the keychain prompt, macOS blocks access.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.blue.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            // Primary action
+            Button(action: {
+                Task { await viewModel.retryKeychainAccess() }
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.caption)
+                    Text("Retry Keychain Access")
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
-                .background(apiKeyInput.isEmpty ? Color.gray : Color.orange)
+                .background(Color.orange)
                 .foregroundColor(.white)
                 .fontWeight(.medium)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             .buttonStyle(.plain)
-            .disabled(apiKeyInput.isEmpty || isSavingKey)
 
-            // Help text
-            HStack(spacing: 4) {
-                Image(systemName: "lock.fill")
+            // Alternative
+            VStack(spacing: 4) {
+                Text("Or re-authenticate in terminal:")
                     .font(.caption2)
-                Text("Stored securely in Keychain")
-                    .font(.caption2)
-            }
-            .foregroundColor(.secondary)
+                    .foregroundColor(.secondary)
 
-            // Retry keychain access link
-            Button(action: {
-                Task { await viewModel.retryKeychainAccess() }
-            }) {
-                Text("Retry Keychain Access")
-                    .font(.caption)
-                    .foregroundColor(.blue)
+                HStack(spacing: 6) {
+                    Text("claude")
+                        .font(.system(.caption, design: .monospaced))
+
+                    Button(action: {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString("claude", forType: .string)
+                    }) {
+                        Image(systemName: "doc.on.doc")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 4))
             }
-            .buttonStyle(.plain)
         }
-        .padding(24)
+        .padding(20)
     }
 
-    // MARK: - API Key Configuration
+    // MARK: - Authentication Required
 
     @ViewBuilder
     private func apiKeyConfigurationView(errorMessage: String) -> some View {
@@ -581,120 +553,66 @@ struct UsagePopoverView: View {
                 .foregroundColor(.orange)
 
             // Message
-            VStack(spacing: 4) {
-                Text("Couldn't read Claude credentials")
+            VStack(spacing: 8) {
+                Text("Authentication Required")
                     .font(.callout)
                     .fontWeight(.medium)
-                Text("Enter your Anthropic API key below")
+
+                Text("Run Claude Code in terminal to authenticate with your Claude account.")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
             }
 
-            // API Key input field
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Group {
-                        if isShowingKey {
-                            TextField("sk-ant-...", text: $apiKeyInput)
-                        } else {
-                            SecureField("sk-ant-...", text: $apiKeyInput)
-                        }
-                    }
-                    .textFieldStyle(.plain)
-                    .font(.system(.body, design: .monospaced))
-                    .padding(8)
-                    .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(keyError != nil ? Color.red.opacity(0.8) : Color.gray.opacity(0.3), lineWidth: 1)
-                    )
+            // Terminal command
+            VStack(spacing: 8) {
+                Text("Run in terminal:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
 
-                    // Reveal toggle
-                    Button(action: { isShowingKey.toggle() }) {
-                        Image(systemName: isShowingKey ? "eye.slash" : "eye")
+                HStack {
+                    Text("claude")
+                        .font(.system(.body, design: .monospaced))
+
+                    Spacer()
+
+                    Button(action: {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString("claude", forType: .string)
+                    }) {
+                        Image(systemName: "doc.on.doc")
                             .foregroundColor(.secondary)
-                            .frame(width: 24, height: 24)
                     }
                     .buttonStyle(.plain)
                 }
-
-                // Error message
-                if let error = keyError {
-                    Text(error)
-                        .font(.caption2)
-                        .foregroundColor(.red)
-                }
-            }
-
-            // Save button
-            Button(action: saveAPIKey) {
-                HStack(spacing: 6) {
-                    if isSavingKey {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                    } else if showKeySaved {
-                        Image(systemName: "checkmark")
-                            .foregroundColor(.white)
-                    }
-                    Text(showKeySaved ? "Saved!" : "Save API Key")
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .background(apiKeyInput.isEmpty ? Color.gray : Color.orange)
-                .foregroundColor(.white)
-                .fontWeight(.medium)
+                .padding(12)
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
-            .buttonStyle(.plain)
-            .disabled(apiKeyInput.isEmpty || isSavingKey)
 
-            // Trust signal
-            HStack(spacing: 4) {
-                Image(systemName: "lock.fill")
+            // Explanation
+            VStack(spacing: 4) {
+                Text("This app uses OAuth credentials from Claude Code CLI.")
                     .font(.caption2)
-                Text("Stored securely in Keychain")
-                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
             }
-            .foregroundColor(.secondary)
+
+            // Retry button
+            Button(action: {
+                Task { await viewModel.refresh() }
+            }) {
+                Text("Retry")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .fontWeight(.medium)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
         }
         .padding(24)
-    }
-
-    private func saveAPIKey() {
-        keyError = nil
-        isSavingKey = true
-
-        Task {
-            do {
-                try await viewModel.saveManualAPIKey(apiKeyInput)
-
-                await MainActor.run {
-                    showKeySaved = true
-                    isSavingKey = false
-                }
-
-                try? await Task.sleep(nanoseconds: 800_000_000)
-
-                await MainActor.run {
-                    showKeySaved = false
-                    apiKeyInput = ""
-                }
-
-                await viewModel.refresh()
-
-            } catch CredentialError.invalidAPIKeyFormat {
-                await MainActor.run {
-                    keyError = "Invalid API key format. Keys start with sk-ant-"
-                    isSavingKey = false
-                }
-            } catch {
-                await MainActor.run {
-                    keyError = "Failed to save: \(error.localizedDescription)"
-                    isSavingKey = false
-                }
-            }
-        }
     }
 }
 
