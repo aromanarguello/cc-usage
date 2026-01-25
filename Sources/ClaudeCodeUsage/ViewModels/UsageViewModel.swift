@@ -11,6 +11,7 @@ final class UsageViewModel {
     private(set) var agentCount: AgentCount?
     private(set) var usingManualKey: Bool = false
     private(set) var orphanedSubagents: [ProcessInfo] = []
+    private(set) var keychainAccessDenied: Bool = false
     private let notificationService = NotificationService.shared
 
     @ObservationIgnored
@@ -50,10 +51,28 @@ final class UsageViewModel {
 
     func saveManualAPIKey(_ key: String) async throws {
         try await credentialService.saveManualAPIKey(key)
+        // Manual key now takes priority, so keychain denial is no longer relevant for UI
+        self.keychainAccessDenied = false
     }
 
     func deleteManualAPIKey() async throws {
         try await credentialService.deleteManualAPIKey()
+        // Invalidate cache to force fresh keychain read
+        await credentialService.invalidateCache()
+    }
+
+    /// Force a fresh credential fetch by invalidating the cache
+    func forceRefresh() async {
+        await credentialService.invalidateCache()
+        await refresh()
+    }
+
+    /// Clears keychain access denied state and retries
+    func retryKeychainAccess() async {
+        await credentialService.clearAccessDeniedState()
+        await credentialService.invalidateCache()
+        self.keychainAccessDenied = false
+        await refresh()
     }
 
     func validateAPIKeyFormat(_ key: String) async -> Bool {
@@ -71,8 +90,18 @@ final class UsageViewModel {
             lastFetchTime = Date()
             // Check auth method
             self.usingManualKey = await credentialService.hasManualAPIKey()
+            // Clear access denied state on success
+            self.keychainAccessDenied = false
+        } catch let error as CredentialError {
+            errorMessage = error.localizedDescription
+            // Track if keychain access was denied
+            if error.isAccessDenied {
+                self.keychainAccessDenied = true
+            }
         } catch {
             errorMessage = error.localizedDescription
+            // Also check credential service for access denied state
+            self.keychainAccessDenied = await credentialService.wasAccessDenied()
         }
 
         // Also refresh agent count
