@@ -276,6 +276,11 @@ struct UsagePopoverView: View {
         }
     }
 
+    private func openKeychainAccess() {
+        let url = URL(fileURLWithPath: "/System/Applications/Utilities/Keychain Access.app")
+        NSWorkspace.shared.open(url)
+    }
+
     @ViewBuilder
     private func usageSection(
         icon: String,
@@ -514,6 +519,22 @@ struct UsagePopoverView: View {
                 .padding(.vertical, 8)
                 .background(Color.orange)
                 .foregroundColor(.white)
+                .fontWeight(.medium)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+
+            // Open Keychain Access button
+            Button(action: openKeychainAccess) {
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.rectangle")
+                        .font(.caption)
+                    Text("Open Keychain Access")
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(Color.secondary.opacity(0.15))
+                .foregroundColor(.primary)
                 .fontWeight(.medium)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
