@@ -30,6 +30,11 @@ struct UsagePopoverView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if viewModel.showOnboarding {
+                OnboardingView(onComplete: {
+                    viewModel.completeOnboarding()
+                })
+            } else {
             // Header
             HStack {
                 Text("Claude Usage")
@@ -187,6 +192,7 @@ struct UsagePopoverView: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
+            }  // end else (onboarding)
         }
         .frame(width: 320)
         .background(.ultraThinMaterial)
