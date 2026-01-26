@@ -27,6 +27,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 SIGN=false
 NOTARIZE=false
 DMG=false
+DEBUG=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -49,8 +50,13 @@ while [[ $# -gt 0 ]]; do
             DMG=true
             shift
             ;;
+        --debug)
+            DEBUG=true
+            SIGN=true
+            shift
+            ;;
         *)
-            echo "Usage: $0 [--sign] [--notarize] [--dmg] [--all]"
+            echo "Usage: $0 [--sign] [--notarize] [--dmg] [--all] [--debug]"
             exit 1
             ;;
     esac
@@ -61,27 +67,40 @@ log_info "Cleaning release directory..."
 rm -rf "$RELEASE_DIR"
 mkdir -p "$RELEASE_DIR"
 
-# Build universal binary (ARM64 + x86_64)
-log_info "Building release binary..."
+# Build binary
 cd "$PROJECT_DIR"
 
-log_info "Building for ARM64..."
-swift build -c release --arch arm64
+if [ "$DEBUG" = true ]; then
+    log_info "Building debug binary for ARM64..."
+    swift build -c debug --arch arm64
+    BUILD_CONFIG="debug"
+else
+    log_info "Building release binary..."
+    log_info "Building for ARM64..."
+    swift build -c release --arch arm64
 
-log_info "Building for x86_64..."
-swift build -c release --arch x86_64
+    log_info "Building for x86_64..."
+    swift build -c release --arch x86_64
+    BUILD_CONFIG="release"
+fi
 
 # Create app bundle structure
 log_info "Creating app bundle..."
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
 
-# Create universal binary with lipo
-log_info "Creating universal binary..."
-lipo -create \
-    "$BUILD_DIR/arm64-apple-macosx/release/$APP_NAME" \
-    "$BUILD_DIR/x86_64-apple-macosx/release/$APP_NAME" \
-    -output "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+if [ "$DEBUG" = true ]; then
+    # Debug: single architecture only (faster builds)
+    log_info "Copying debug binary..."
+    cp "$BUILD_DIR/arm64-apple-macosx/debug/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+else
+    # Release: universal binary
+    log_info "Creating universal binary..."
+    lipo -create \
+        "$BUILD_DIR/arm64-apple-macosx/release/$APP_NAME" \
+        "$BUILD_DIR/x86_64-apple-macosx/release/$APP_NAME" \
+        -output "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+fi
 
 # Copy Info.plist
 cp "$PROJECT_DIR/Resources/Info.plist" "$APP_BUNDLE/Contents/"

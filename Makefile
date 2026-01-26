@@ -1,4 +1,4 @@
-.PHONY: build run clean release sign notarize dmg all open-app help
+.PHONY: build run clean release sign notarize dmg all open-app debug-app run-signed help
 
 # Development
 build:
@@ -6,6 +6,13 @@ build:
 
 run: build
 	.build/debug/ClaudeCodeUsage
+
+# Development with proper signing (prevents keychain prompts)
+debug-app:
+	./scripts/build.sh --debug
+
+run-signed: debug-app
+	open release/ClaudeCodeUsage.app
 
 clean:
 	rm -rf .build release
@@ -36,6 +43,8 @@ help:
 	@echo "Available targets:"
 	@echo "  make build     - Build debug version"
 	@echo "  make run       - Build and run debug version"
+	@echo "  make debug-app - Build signed debug .app bundle (for development)"
+	@echo "  make run-signed - Build and run signed debug .app"
 	@echo "  make clean     - Remove build artifacts"
 	@echo "  make release   - Build release .app bundle (unsigned)"
 	@echo "  make sign      - Build and sign .app bundle"
