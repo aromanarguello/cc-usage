@@ -448,7 +448,7 @@ struct UsagePopoverView: View {
                     .monospacedDigit()
             }
 
-            UsageBarView(progress: extraUsage.utilization / 100.0, color: Color(hex: "10B981"))
+            UsageBarView(progress: extraUsage.utilization / 100.0, color: Color(hex: "38BDF8"))
 
             Text("\(extraUsage.usedUSD) / \(extraUsage.limitUSD) this month")
                 .font(.caption)
