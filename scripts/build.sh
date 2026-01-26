@@ -3,7 +3,7 @@ set -e
 
 # Configuration
 APP_NAME="ClaudeCodeUsage"
-BUNDLE_ID="com.claudeusagetracker.app"
+BUNDLE_ID="com.claudecodeusage.app"
 VERSION="1.9.2"
 
 # Paths
