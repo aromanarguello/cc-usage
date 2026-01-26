@@ -8,9 +8,24 @@
 
 ---
 
+## Revised Implementation Order (Updated 2026-01-26)
+
+Based on diagnostic feedback from GitHub Issue #3:
+- Keychain item **exists** but app lacks ACL permission to read it
+- File-based credentials (`~/.claude/.credentials.json`) **do not exist** for affected users
+
+**New priority order:**
+1. **Phase 2: Environment Variable** - Immediate workaround for power users
+2. **Phase 4: App's Keychain Cache** - Cache after one successful grant
+3. **Phase 3: Preflight Check** - Better error messages for ACL issues
+4. **Phase 1: File Fallback** - Still useful for Linux/cross-platform users
+5. **Phase 5: Debug Mode** - Support tooling
+
+---
+
 ## Phase 1: File System Fallback
 
-**Priority**: High (Quick win, solves immediate user issues)
+**Priority**: Low (Most macOS users don't have this file)
 
 ### Task 1.1: Add File-Based Credential Reading
 

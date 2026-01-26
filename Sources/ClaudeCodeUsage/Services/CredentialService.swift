@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 import Security
 
 enum CredentialError: Error, LocalizedError {
@@ -37,14 +38,45 @@ enum CredentialError: Error, LocalizedError {
     }
 }
 
+/// Tracks where the credential was retrieved from (for debugging)
+enum CredentialSource: String {
+    case environment = "Environment Variable"
+    case memoryCache = "Memory Cache"
+    case appCache = "App Keychain Cache"
+    case file = "File System"
+    case keychain = "Claude Code Keychain"
+}
+
+/// Result of a preflight keychain access check (non-interactive)
+enum KeychainAccessStatus {
+    case allowed              // Can access without user interaction
+    case notFound             // Keychain item doesn't exist
+    case interactionRequired  // Will require user to grant access
+    case failure(OSStatus)    // Other error occurred
+}
+
 actor CredentialService {
+    // Claude Code's keychain credentials
     private let serviceName = "Claude Code-credentials"
+
+    // App's own keychain entries
     private let manualKeyService = "ClaudeCodeUsage-apiKey"
     private let manualKeyAccount = "anthropic-api-key"
+    private let tokenCacheService = "ClaudeCodeUsage-tokenCache"
+    private let tokenCacheAccount = "oauth-token"
+
+    // UserDefaults keys
     private let accessDeniedKey = "keychainAccessDenied"
 
-    // Token cache - cached until invalidated (on 401) or app restart
+    /// Environment variable name for OAuth token override
+    /// Users can set this to bypass keychain access issues
+    private let envTokenKey = "CLAUDE_USAGE_OAUTH_TOKEN"
+
+    // In-memory token cache - cleared on 401 or app restart
     private var cachedToken: String?
+
+    /// Tracks where the last successful credential came from
+    private(set) var lastCredentialSource: CredentialSource?
 
     // Manual API key cache - cached until invalidated or app restart
     private var cachedManualKey: String?
@@ -75,23 +107,228 @@ actor CredentialService {
         status == errSecUserCanceled
     }
 
+    // MARK: - Environment Variable Override
+
+    /// Checks for OAuth token in environment variable (highest priority)
+    /// This allows users to bypass keychain access issues entirely
+    private func getTokenFromEnvironment() -> String? {
+        guard let token = ProcessInfo.processInfo.environment[envTokenKey],
+              !token.isEmpty else {
+            return nil
+        }
+        return token
+    }
+
+    /// Returns true if an environment variable token is configured
+    func hasEnvironmentToken() -> Bool {
+        return getTokenFromEnvironment() != nil
+    }
+
+    // MARK: - Keychain Preflight Check
+
+    /// Checks if Claude's keychain item can be accessed without user interaction
+    /// This is useful for determining UI state before triggering a prompt
+    func preflightClaudeKeychainAccess() -> KeychainAccessStatus {
+        let context = LAContext()
+        context.interactionNotAllowed = true
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceName,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecReturnData as String: true,
+            kSecUseAuthenticationContext as String: context
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        switch status {
+        case errSecSuccess:
+            return .allowed
+        case errSecItemNotFound:
+            return .notFound
+        case errSecInteractionNotAllowed, errSecAuthFailed, errSecUserCanceled:
+            return .interactionRequired
+        default:
+            return .failure(status)
+        }
+    }
+
+    /// Returns a user-friendly description of the keychain access status
+    func getAccessStatusDescription() -> String {
+        // Check sources in priority order
+        if hasEnvironmentToken() {
+            return "Using environment variable token"
+        }
+
+        if cachedToken != nil {
+            return "Using cached token"
+        }
+
+        if getTokenFromAppCache() != nil {
+            return "Using app's cached token"
+        }
+
+        if hasFileCredentials() {
+            return "Using file-based credentials"
+        }
+
+        // Check Claude's keychain
+        switch preflightClaudeKeychainAccess() {
+        case .allowed:
+            return "Claude keychain accessible"
+        case .notFound:
+            return "Not logged in to Claude Code"
+        case .interactionRequired:
+            return "Keychain access requires permission"
+        case .failure(let status):
+            return "Keychain error: \(status)"
+        }
+    }
+
+    // MARK: - App's Keychain Token Cache
+
+    /// Saves a token to the app's own keychain cache
+    /// This allows future access without requiring permission to Claude's keychain
+    private func cacheTokenInAppKeychain(_ token: String) {
+        guard let data = token.data(using: .utf8) else { return }
+
+        // Delete any existing cached token
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: tokenCacheService,
+            kSecAttrAccount as String: tokenCacheAccount
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        // Add the new token
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: tokenCacheService,
+            kSecAttrAccount as String: tokenCacheAccount,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked
+        ]
+        SecItemAdd(addQuery as CFDictionary, nil)
+    }
+
+    /// Retrieves token from app's own keychain cache
+    private func getTokenFromAppCache() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: tokenCacheService,
+            kSecAttrAccount as String: tokenCacheAccount,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let token = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        return token
+    }
+
+    /// Deletes the cached token from app's keychain
+    private func clearAppKeychainCache() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: tokenCacheService,
+            kSecAttrAccount as String: tokenCacheAccount
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
+    // MARK: - File System Credentials
+
+    /// Path to Claude Code's file-based credentials (used on Linux, may exist on Mac)
+    private var fileCredentialsPath: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude")
+            .appendingPathComponent(".credentials.json")
+    }
+
+    /// Attempts to read OAuth token from file system
+    /// This is a fallback for users who have file-based credentials (e.g., from Linux)
+    private func getTokenFromFile() -> String? {
+        let fileURL = fileCredentialsPath
+
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return nil
+        }
+
+        do {
+            let data = try Data(contentsOf: fileURL)
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let oauthData = json["claudeAiOauth"] as? [String: Any],
+                  let accessToken = oauthData["accessToken"] as? String else {
+                return nil
+            }
+
+            return accessToken
+        } catch {
+            return nil
+        }
+    }
+
+    /// Returns true if file-based credentials exist
+    func hasFileCredentials() -> Bool {
+        return FileManager.default.fileExists(atPath: fileCredentialsPath.path)
+    }
+
+    // MARK: - Token Retrieval
+
     /// Attempts to get an OAuth access token from Claude Code CLI credentials
+    /// Priority order: 1) Env var, 2) Memory cache, 3) App cache, 4) File system, 5) Claude's keychain
     func getAccessToken() throws -> String {
-        // 1. If keychain access was previously denied, don't try keychain access
+        // 1. Environment variable (highest priority - bypasses all other sources)
+        if let envToken = getTokenFromEnvironment() {
+            lastCredentialSource = .environment
+            return envToken
+        }
+
+        // 2. Check in-memory cache (fastest, cleared on 401 or app restart)
+        if let cached = cachedToken {
+            lastCredentialSource = .memoryCache
+            return cached
+        }
+
+        // 3. Check app's own keychain cache (survives app restarts, no ACL issues)
+        if let appCachedToken = getTokenFromAppCache() {
+            cachedToken = appCachedToken  // Also store in memory for speed
+            lastCredentialSource = .appCache
+            return appCachedToken
+        }
+
+        // 4. Check file-based credentials (used on Linux, may exist on Mac)
+        if let fileToken = getTokenFromFile() {
+            cachedToken = fileToken
+            // Also cache in app's keychain for consistency
+            cacheTokenInAppKeychain(fileToken)
+            lastCredentialSource = .file
+            return fileToken
+        }
+
+        // 5. If keychain access was previously denied, don't try Claude's keychain
         if lastAccessDenied {
             throw CredentialError.accessDenied
         }
 
-        // 2. Check OAuth token cache (cached until 401 or app restart)
-        if let cached = cachedToken {
-            return cached
-        }
-
-        // 3. Try OAuth token from keychain
+        // 6. Try OAuth token from Claude's keychain (may prompt user)
         do {
             let token = try getClaudeCodeToken()
-            // Cache the result
+            // Cache in memory
             cachedToken = token
+            // Also cache in app's keychain for future use (avoids repeated prompts)
+            cacheTokenInAppKeychain(token)
+            lastCredentialSource = .keychain
             return token
         } catch let error as CredentialError {
             // Track access denied state
@@ -102,10 +339,13 @@ actor CredentialService {
         }
     }
 
-    /// Invalidates the token cache, forcing a fresh keychain read on next access
+    /// Invalidates all token caches, forcing a fresh keychain read on next access
+    /// Called when API returns 401 (token expired/invalid)
     func invalidateCache() {
         cachedToken = nil
         cachedManualKey = nil
+        // Also clear the app's keychain cache since the token is invalid
+        clearAppKeychainCache()
     }
 
     /// Gets the Claude Code OAuth token from keychain
@@ -260,5 +500,10 @@ actor CredentialService {
     /// Checks if a manual API key is configured
     func hasManualAPIKey() -> Bool {
         return (try? getManualAPIKey()) != nil
+    }
+
+    /// Checks if we have a cached token available (in memory or app keychain)
+    func hasCachedToken() -> Bool {
+        return cachedToken != nil || getTokenFromAppCache() != nil
     }
 }
