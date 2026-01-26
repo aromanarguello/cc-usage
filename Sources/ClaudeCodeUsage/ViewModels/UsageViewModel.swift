@@ -16,6 +16,11 @@ final class UsageViewModel {
     @ObservationIgnored
     @AppStorage("orphanNotificationsEnabled") private var orphanNotificationsEnabled: Bool = true
 
+    @ObservationIgnored
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboardingStorage: Bool = false
+
+    private(set) var showOnboarding: Bool = false
+
     private let apiService: UsageAPIService
     private let credentialService: CredentialService
     private let agentCounter = AgentCounter()
@@ -56,8 +61,22 @@ final class UsageViewModel {
         await refresh()
     }
 
+    /// Marks onboarding as complete and triggers first refresh
+    func completeOnboarding() {
+        hasCompletedOnboardingStorage = true
+        showOnboarding = false
+        Task { await refresh() }
+    }
+
     func refresh() async {
         guard !isLoading else { return }
+
+        // Show onboarding on first run before keychain access
+        if !hasCompletedOnboardingStorage && usageData == nil && !keychainAccessDenied {
+            showOnboarding = true
+            isLoading = false
+            return
+        }
 
         isLoading = true
         errorMessage = nil
