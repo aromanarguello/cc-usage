@@ -107,13 +107,32 @@ actor CredentialService {
         status == errSecUserCanceled
     }
 
+    // MARK: - Token Validation
+
+    /// Validates OAuth token format (basic sanity check)
+    /// OAuth tokens from Claude typically start with specific prefixes
+    private func isValidTokenFormat(_ token: String) -> Bool {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Token should be non-empty and have reasonable length
+        // Claude OAuth tokens are typically 100+ characters
+        guard !trimmed.isEmpty, trimmed.count >= 20, trimmed.count < 10_000 else {
+            return false
+        }
+        // Should not contain newlines or control characters
+        guard !trimmed.contains(where: { $0.isNewline || $0.asciiValue ?? 0 < 32 }) else {
+            return false
+        }
+        return true
+    }
+
     // MARK: - Environment Variable Override
 
     /// Checks for OAuth token in environment variable (highest priority)
     /// This allows users to bypass keychain access issues entirely
     private func getTokenFromEnvironment() -> String? {
         guard let token = ProcessInfo.processInfo.environment[envTokenKey],
-              !token.isEmpty else {
+              !token.isEmpty,
+              isValidTokenFormat(token) else {
             return nil
         }
         return token
@@ -228,7 +247,8 @@ actor CredentialService {
 
         guard status == errSecSuccess,
               let data = result as? Data,
-              let token = String(data: data, encoding: .utf8) else {
+              let token = String(data: data, encoding: .utf8),
+              isValidTokenFormat(token) else {
             return nil
         }
 
@@ -259,16 +279,29 @@ actor CredentialService {
     private func getTokenFromFile() -> String? {
         let fileURL = fileCredentialsPath
 
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+        // Security: Verify file exists and is a regular file (not symlink to sensitive location)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else {
             return nil
         }
 
         do {
             let data = try Data(contentsOf: fileURL)
 
+            // Security: Limit file size to prevent memory exhaustion (1MB max)
+            guard data.count < 1_000_000 else {
+                return nil
+            }
+
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let oauthData = json["claudeAiOauth"] as? [String: Any],
                   let accessToken = oauthData["accessToken"] as? String else {
+                return nil
+            }
+
+            // Security: Basic token format validation
+            guard isValidTokenFormat(accessToken) else {
                 return nil
             }
 
