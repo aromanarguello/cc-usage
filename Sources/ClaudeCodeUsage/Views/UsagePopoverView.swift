@@ -655,7 +655,7 @@ struct UsagePopoverView: View {
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    let workaroundCommand = "export CLAUDE_USAGE_OAUTH_TOKEN=$(jq -r '.claudeAiOauth.accessToken' ~/.claude/.credentials.json)"
+                    let workaroundCommand = "export CLAUDE_USAGE_OAUTH_TOKEN=$(security find-generic-password -s 'Claude Code-credentials' -w | jq -r '.claudeAiOauth.accessToken')"
 
                     HStack(alignment: .top) {
                         Text(workaroundCommand)

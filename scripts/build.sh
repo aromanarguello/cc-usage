@@ -4,7 +4,7 @@ set -e
 # Configuration
 APP_NAME="ClaudeCodeUsage"
 BUNDLE_ID="com.claudecodeusage.app"
-VERSION="1.10.3"
+VERSION="1.10.4"
 
 # Paths
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -191,24 +191,36 @@ fi
 if [ "$DMG" = true ]; then
     log_info "Creating DMG..."
 
-    DMG_PATH="$RELEASE_DIR/$APP_NAME-$VERSION.dmg"
-    DMG_TEMP="$RELEASE_DIR/dmg_temp"
+    DMG_PATH="$RELEASE_DIR/$APP_NAME.dmg"
+    DMG_TEMP_RW="$RELEASE_DIR/temp_rw.dmg"
+    DMG_MOUNT="/tmp/dmg_mount_$$"
 
-    # Create temp directory for DMG contents
-    mkdir -p "$DMG_TEMP"
-    cp -R "$APP_BUNDLE" "$DMG_TEMP/"
+    # Calculate size needed (app size + 5MB buffer)
+    APP_SIZE=$(du -sm "$APP_BUNDLE" | cut -f1)
+    DMG_SIZE=$((APP_SIZE + 5))
 
-    # Create symlink to Applications
-    ln -s /Applications "$DMG_TEMP/Applications"
+    # Create empty read-write DMG (avoids /Volumes permission issues)
+    log_info "Creating temporary DMG..."
+    hdiutil create -size "${DMG_SIZE}m" -fs HFS+ -volname "$APP_NAME" "$DMG_TEMP_RW"
 
-    # Create DMG
-    hdiutil create -volname "$APP_NAME" \
-        -srcfolder "$DMG_TEMP" \
-        -ov -format UDZO \
-        "$DMG_PATH"
+    # Mount to /tmp (more permissive than /Volumes)
+    log_info "Mounting DMG..."
+    hdiutil attach "$DMG_TEMP_RW" -mountpoint "$DMG_MOUNT"
 
-    # Clean up
-    rm -rf "$DMG_TEMP"
+    # Copy app and create Applications symlink
+    log_info "Copying files..."
+    cp -R "$APP_BUNDLE" "$DMG_MOUNT/"
+    ln -s /Applications "$DMG_MOUNT/Applications"
+
+    # Unmount
+    hdiutil detach "$DMG_MOUNT"
+
+    # Convert to compressed read-only DMG
+    log_info "Compressing DMG..."
+    hdiutil convert "$DMG_TEMP_RW" -format UDZO -o "$DMG_PATH"
+
+    # Clean up temp DMG
+    rm -f "$DMG_TEMP_RW"
 
     # Sign DMG if we have a certificate
     if [ "$SIGN" = true ]; then
@@ -237,7 +249,7 @@ log_info "========== Build Complete =========="
 log_info "App Bundle: $APP_BUNDLE"
 [ "$SIGN" = true ] && log_info "Signed: Yes"
 [ "$NOTARIZE" = true ] && log_info "Notarized: Yes"
-[ "$DMG" = true ] && log_info "DMG: $RELEASE_DIR/$APP_NAME-$VERSION.dmg"
+[ "$DMG" = true ] && log_info "DMG: $RELEASE_DIR/$APP_NAME.dmg"
 echo ""
 log_info "To run the app:"
 log_info "  open $APP_BUNDLE"
