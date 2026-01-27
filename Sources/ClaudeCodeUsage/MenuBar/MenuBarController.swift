@@ -68,7 +68,20 @@ final class MenuBarController: ObservableObject {
         }
     }
 
+    /// Recreates the status item if it was lost
+    private func ensureStatusItemExists() {
+        guard statusItem?.button == nil else { return }
+
+        #if DEBUG
+        print("[MenuBarController] Status item lost, recreating...")
+        #endif
+
+        setupStatusItem()
+        setupPopover()
+    }
+
     private func updateStatusItemTitle() {
+        ensureStatusItemExists()
         guard let button = statusItem?.button else { return }
 
         if let data = viewModel.usageData {
