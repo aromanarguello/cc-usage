@@ -112,4 +112,27 @@ final class MenuBarController: ObservableObject {
             Task { await viewModel.refresh() }
         }
     }
+
+    /// Cleans up all resources before termination
+    func cleanup() {
+        // Cancel background tasks
+        updateTask?.cancel()
+        updateTask = nil
+        viewModel.stopPolling()
+
+        // Remove event monitor
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
+
+        // Close popover and release status item
+        popover?.close()
+        popover = nil
+
+        if let item = statusItem {
+            NSStatusBar.system.removeStatusItem(item)
+            statusItem = nil
+        }
+    }
 }
