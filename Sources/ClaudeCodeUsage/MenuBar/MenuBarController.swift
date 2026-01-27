@@ -18,6 +18,7 @@ final class MenuBarController: ObservableObject {
         setupStatusItem()
         setupPopover()
         setupEventMonitor()
+        setupWorkspaceObservers()
         startPolling()
     }
 
@@ -53,6 +54,30 @@ final class MenuBarController: ObservableObject {
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             if let popover = self?.popover, popover.isShown {
                 popover.performClose(nil)
+            }
+        }
+    }
+
+    private func setupWorkspaceObservers() {
+        let nc = NSWorkspace.shared.notificationCenter
+
+        nc.addObserver(
+            forName: NSWorkspace.screensDidWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.ensureStatusItemExists()
+            }
+        }
+
+        nc.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.ensureStatusItemExists()
             }
         }
     }
