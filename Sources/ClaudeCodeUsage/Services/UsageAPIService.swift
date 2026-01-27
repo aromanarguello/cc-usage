@@ -159,16 +159,13 @@ actor UsageAPIService {
             return false
         }
 
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: path)
-        task.arguments = ["--version"]
-        task.standardOutput = FileHandle.nullDevice
-        task.standardError = FileHandle.nullDevice
-
         do {
-            try task.run()
-            task.waitUntilExit()
-            return task.terminationStatus == 0
+            let (_, exitCode) = try await runProcessAsync(
+                executablePath: path,
+                arguments: ["--version"],
+                timeout: Duration.seconds(10)
+            )
+            return exitCode == 0
         } catch {
             return false
         }
