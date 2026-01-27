@@ -11,6 +11,7 @@ struct UsagePopoverView: View {
     @State private var showSettings = false
     @State private var showKillAllConfirmation = false
     @State private var isKillingAllAgents = false
+    @State private var showTroubleshooting = false
 
     private let updateChecker = UpdateChecker()
 
@@ -640,6 +641,54 @@ struct UsagePopoverView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             .buttonStyle(.plain)
+
+            // Troubleshooting section
+            DisclosureGroup(isExpanded: $showTroubleshooting) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("If you've already authenticated but still see this error, your credentials may exist but the app can't access them due to macOS keychain permissions.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("Workaround: Set the token via environment variable before launching:")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    let workaroundCommand = "export CLAUDE_USAGE_OAUTH_TOKEN=$(jq -r '.claudeAiOauth.accessToken' ~/.claude/.credentials.json)"
+
+                    HStack(alignment: .top) {
+                        Text(workaroundCommand)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundColor(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer()
+
+                        Button(action: {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(workaroundCommand, forType: .string)
+                        }) {
+                            Image(systemName: "doc.on.doc")
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(8)
+                    .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                    Text("Then run the app from that terminal session, or add to your shell profile.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 8)
+            } label: {
+                Text("Having trouble?")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
         .padding(24)
     }
