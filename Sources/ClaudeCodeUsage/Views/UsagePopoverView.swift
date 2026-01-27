@@ -187,7 +187,13 @@ struct UsagePopoverView: View {
                 .disabled(isCheckingUpdate)
                 Spacer()
                 Button("Quit") {
-                    NSApplication.shared.terminate(nil)
+                    Task { @MainActor in
+                        // Set a fallback forced exit in case terminate hangs
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                            exit(0)
+                        }
+                        NSApplication.shared.terminate(nil)
+                    }
                 }
                 .buttonStyle(.plain)
             }
