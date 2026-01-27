@@ -42,4 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NotificationServiceDel
     func notificationServiceDidRequestShowPopover() {
         menuBarController?.showPopover()
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        menuBarController?.cleanup()
+    }
 }
