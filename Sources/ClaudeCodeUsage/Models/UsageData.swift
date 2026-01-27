@@ -88,9 +88,9 @@ struct UsageAPIResponse: Decodable {
     }
 
     struct ExtraUsageResponse: Decodable {
-        let utilization: Double
-        let monthlyLimit: Int
-        let usedCredits: Int
+        let utilization: Double?
+        let monthlyLimit: Int?
+        let usedCredits: Int?
         let isEnabled: Bool
 
         enum CodingKeys: String, CodingKey {
@@ -131,11 +131,17 @@ struct UsageAPIResponse: Decodable {
                     resetsAt: response.resetsAt
                 )
             },
-            extraUsage: extraUsage.map { response in
-                UsageData.ExtraUsage(
-                    utilization: response.utilization,
-                    usedCredits: response.usedCredits,
-                    monthlyLimit: response.monthlyLimit,
+            extraUsage: extraUsage.flatMap { response in
+                // Only create ExtraUsage if we have the required values
+                guard let utilization = response.utilization,
+                      let usedCredits = response.usedCredits,
+                      let monthlyLimit = response.monthlyLimit else {
+                    return nil
+                }
+                return UsageData.ExtraUsage(
+                    utilization: utilization,
+                    usedCredits: usedCredits,
+                    monthlyLimit: monthlyLimit,
                     isEnabled: response.isEnabled
                 )
             },
