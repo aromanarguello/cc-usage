@@ -26,7 +26,7 @@ actor AgentCounter {
     private let hangingThresholdSeconds = 3 * 60 * 60  // 3 hours
 
     func countAgents() async -> AgentCount {
-        let processes = getClaudeProcesses()
+        let processes = await getClaudeProcesses()
 
         let sessions = processes.filter { !$0.isSubagent }.count
         let subagents = processes.filter { $0.isSubagent }.count
@@ -59,7 +59,7 @@ actor AgentCounter {
     }
 
     func detectOrphanedSubagents() async -> [ProcessInfo] {
-        let processes = getClaudeProcesses()
+        let processes = await getClaudeProcesses()
         let sessions = processes.filter { !$0.isSubagent }
         let subagents = processes.filter { $0.isSubagent }
 
@@ -97,30 +97,17 @@ actor AgentCounter {
     }
 
     func getAllSubagents() async -> [ProcessInfo] {
-        let processes = getClaudeProcesses()
+        let processes = await getClaudeProcesses()
         return processes.filter { $0.isSubagent }
     }
 
-    private func getClaudeProcesses() -> [ProcessInfo] {
-        // Get process list with PID, PPID, elapsed time, memory (RSS), CPU%, and command
-        // etime format: [[dd-]hh:]mm:ss
-        // rss: resident set size in KB
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        // Match only the actual claude CLI binary, not MCP plugins with "claude" in path
-        // Looks for: " claude " or "/claude " (the actual CLI command, not paths containing "claude")
-        task.arguments = ["-c", "ps -eo pid,ppid,etime,rss,%cpu,command | grep -E '( |/)claude( |$)' | grep -v grep | grep -v ClaudeCodeUsage"]
-
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = FileHandle.nullDevice
-
+    private func getClaudeProcesses() async -> [ProcessInfo] {
         do {
-            try task.run()
-            task.waitUntilExit()
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            guard let output = String(data: data, encoding: .utf8) else { return [] }
+            let (output, _) = try await runProcessAsync(
+                executablePath: "/bin/zsh",
+                arguments: ["-c", "ps -eo pid,ppid,etime,rss,%cpu,command | grep -E '( |/)claude( |$)' | grep -v grep | grep -v ClaudeCodeUsage"],
+                timeout: Duration.seconds(5)
+            )
 
             return output.split(separator: "\n").compactMap { line -> ProcessInfo? in
                 let parts = line.split(separator: " ", maxSplits: 5, omittingEmptySubsequences: true)
