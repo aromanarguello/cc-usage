@@ -61,6 +61,14 @@ final class UsageViewModel {
         await refresh()
     }
 
+    /// Clears all OAuth caches and triggers re-authentication
+    func clearTokenCache() async {
+        await credentialService.clearTokenCache()
+        self.keychainAccessDenied = false
+        self.usageData = nil  // Clear old data so view transitions correctly on denial
+        await refresh()  // Triggers keychain access prompt
+    }
+
     /// Marks onboarding as complete and triggers first refresh
     func completeOnboarding() {
         hasCompletedOnboardingStorage = true

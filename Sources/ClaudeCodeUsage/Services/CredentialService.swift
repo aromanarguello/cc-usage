@@ -62,11 +62,14 @@ actor CredentialService {
     // App's own keychain entries
     private let manualKeyService = "ClaudeCodeUsage-apiKey"
     private let manualKeyAccount = "anthropic-api-key"
-    private let tokenCacheService = "ClaudeCodeUsage-tokenCache"
-    private let tokenCacheAccount = "oauth-token"
+    private let oauthCacheService = "ClaudeCodeUsage-oauth"
+    private let oauthCacheAccount = "cached-token"
 
     // UserDefaults keys
-    private let accessDeniedKey = "keychainAccessDenied"
+    private let denialTimestampKey = "keychainDenialTimestamp"
+
+    /// Cooldown period before retrying after keychain denial (6 hours, matching CodexBar pattern)
+    private let denialCooldownSeconds: TimeInterval = 6 * 60 * 60
 
     /// Environment variable name for OAuth token override
     /// Users can set this to bypass keychain access issues
@@ -81,20 +84,26 @@ actor CredentialService {
     // Manual API key cache - cached until invalidated or app restart
     private var cachedManualKey: String?
 
-    // Track if keychain access was denied (persisted to UserDefaults)
-    private var lastAccessDenied: Bool {
-        get { UserDefaults.standard.bool(forKey: accessDeniedKey) }
-        set { UserDefaults.standard.set(newValue, forKey: accessDeniedKey) }
+    // Track when keychain access was denied (persisted to UserDefaults)
+    private var lastDenialTimestamp: Date? {
+        get { UserDefaults.standard.object(forKey: denialTimestampKey) as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: denialTimestampKey) }
     }
 
-    /// Returns true if the last keychain access attempt was denied
+    /// Whether the denial cooldown period is still active
+    private var isDenialCooldownActive: Bool {
+        guard let timestamp = lastDenialTimestamp else { return false }
+        return Date().timeIntervalSince(timestamp) < denialCooldownSeconds
+    }
+
+    /// Returns true if keychain access was denied and cooldown is still active
     func wasAccessDenied() -> Bool {
-        return lastAccessDenied
+        return isDenialCooldownActive
     }
 
     /// Clears the access denied state (for retry button)
     func clearAccessDeniedState() {
-        lastAccessDenied = false
+        lastDenialTimestamp = nil
     }
 
     /// Checks if an OSStatus indicates keychain access was denied by user
@@ -130,7 +139,7 @@ actor CredentialService {
     /// Checks for OAuth token in environment variable (highest priority)
     /// This allows users to bypass keychain access issues entirely
     private func getTokenFromEnvironment() -> String? {
-        guard let token = ProcessInfo.processInfo.environment[envTokenKey],
+        guard let token = Foundation.ProcessInfo().environment[envTokenKey],
               !token.isEmpty,
               isValidTokenFormat(token) else {
             return nil
@@ -216,16 +225,16 @@ actor CredentialService {
         // Delete any existing cached token
         let deleteQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: tokenCacheService,
-            kSecAttrAccount as String: tokenCacheAccount
+            kSecAttrService as String: oauthCacheService,
+            kSecAttrAccount as String: oauthCacheAccount
         ]
         SecItemDelete(deleteQuery as CFDictionary)
 
         // Add the new token
         let addQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: tokenCacheService,
-            kSecAttrAccount as String: tokenCacheAccount,
+            kSecAttrService as String: oauthCacheService,
+            kSecAttrAccount as String: oauthCacheAccount,
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked
         ]
@@ -236,8 +245,8 @@ actor CredentialService {
     private func getTokenFromAppCache() -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: tokenCacheService,
-            kSecAttrAccount as String: tokenCacheAccount,
+            kSecAttrService as String: oauthCacheService,
+            kSecAttrAccount as String: oauthCacheAccount,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -259,8 +268,8 @@ actor CredentialService {
     private func clearAppKeychainCache() {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: tokenCacheService,
-            kSecAttrAccount as String: tokenCacheAccount
+            kSecAttrService as String: oauthCacheService,
+            kSecAttrAccount as String: oauthCacheAccount
         ]
         SecItemDelete(query as CFDictionary)
     }
@@ -349,8 +358,8 @@ actor CredentialService {
             return fileToken
         }
 
-        // 5. If keychain access was previously denied, don't try Claude's keychain
-        if lastAccessDenied {
+        // 5. If keychain access was recently denied, don't try Claude's keychain (cooldown active)
+        if isDenialCooldownActive {
             throw CredentialError.accessDenied
         }
 
@@ -364,9 +373,9 @@ actor CredentialService {
             lastCredentialSource = .keychain
             return token
         } catch let error as CredentialError {
-            // Track access denied state
+            // Track access denied state with timestamp (starts cooldown)
             if error.isAccessDenied {
-                lastAccessDenied = true
+                lastDenialTimestamp = Date()
             }
             throw error
         }
@@ -379,6 +388,14 @@ actor CredentialService {
         cachedManualKey = nil
         // Also clear the app's keychain cache since the token is invalid
         clearAppKeychainCache()
+    }
+
+    /// Clears all OAuth caches and resets denial state
+    /// Forces full re-authentication from Claude Code's keychain
+    func clearTokenCache() {
+        cachedToken = nil
+        clearAppKeychainCache()
+        lastDenialTimestamp = nil  // Reset so it will prompt for access again
     }
 
     /// Gets the Claude Code OAuth token from keychain
@@ -469,7 +486,7 @@ actor CredentialService {
         cachedManualKey = trimmed
 
         // Clear access denied state - user now has a valid credential
-        lastAccessDenied = false
+        lastDenialTimestamp = nil
     }
 
     /// Retrieves the manual API key from keychain

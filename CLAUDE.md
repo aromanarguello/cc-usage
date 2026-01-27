@@ -34,6 +34,29 @@ export APPLE_TEAM_ID='YOURTEAMID'
 export APPLE_APP_PASSWORD='xxxx-xxxx-xxxx-xxxx'
 ```
 
+## Credential Troubleshooting
+
+If experiencing keychain access issues (permission prompts, access denied errors), you can temporarily bypass the keychain by setting the OAuth token directly.
+
+**Security note:** Avoid storing tokens in shell history. Use a space prefix (with `histcontrol=ignorespace`) or load from a file:
+
+```bash
+# Option 1: Space-prefixed command (not saved to history)
+ export CLAUDE_USAGE_OAUTH_TOKEN="your-token-here"
+
+# Option 2: Load from credentials file
+export CLAUDE_USAGE_OAUTH_TOKEN=$(jq -r '.claudeAiOauth.accessToken' ~/.claude/.credentials.json)
+
+# Then launch the app
+open /Applications/ClaudeCodeUsage.app
+```
+
+To find your OAuth token manually:
+1. Check `~/.claude/.credentials.json` (look for `claudeAiOauth.accessToken`)
+2. Or use Keychain Access app to view "Claude Code-credentials"
+
+The environment variable has highest priority, bypassing all keychain access. This is a temporary workaround - resolve the underlying keychain permissions issue when possible.
+
 ## Architecture
 
 ```

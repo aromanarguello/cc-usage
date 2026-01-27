@@ -277,8 +277,10 @@ struct UsagePopoverView: View {
     }
 
     private func openKeychainAccess() {
-        let url = URL(fileURLWithPath: "/System/Applications/Utilities/Keychain Access.app")
-        NSWorkspace.shared.open(url)
+        // Use bundle identifier for reliability across macOS versions
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.keychainaccess") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     @ViewBuilder
