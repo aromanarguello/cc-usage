@@ -96,6 +96,7 @@ final class UsageViewModel {
     private let credentialService: CredentialService
     private let agentCounter = AgentCounter()
     private var pollingTask: Task<Void, Never>?
+    private var currentRefreshTask: Task<Void, Never>?
 
     @ObservationIgnored
     @AppStorage("refreshInterval") private var refreshInterval: Double = 60
@@ -199,7 +200,12 @@ final class UsageViewModel {
     }
 
     func refresh(userInitiated: Bool = false) async {
-        guard refreshState.canAutoRefresh || refreshState == .needsManualRefresh else { return }
+        // Cancel any stuck previous refresh if user-initiated
+        if userInitiated {
+            currentRefreshTask?.cancel()
+        }
+
+        guard refreshState.canAutoRefresh || refreshState == .needsManualRefresh || userInitiated else { return }
 
         // For automatic refreshes, check if we can proceed without prompting
         if !userInitiated {
@@ -220,43 +226,47 @@ final class UsageViewModel {
         refreshState = .loading
         errorMessage = nil
 
-        do {
-            usageData = try await withTimeout(seconds: refreshTimeoutSeconds) {
-                try await self.apiService.fetchUsage()
+        currentRefreshTask = Task {
+            do {
+                usageData = try await withTimeout(seconds: refreshTimeoutSeconds) {
+                    try await self.apiService.fetchUsage()
+                }
+                lastFetchTime = Date()
+                // Clear access denied state on success
+                self.keychainAccessDenied = false
+            } catch let error as CredentialError {
+                errorMessage = error.localizedDescription
+                // Track if keychain access was denied
+                if error.isAccessDenied {
+                    self.keychainAccessDenied = true
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+                // Also check credential service for access denied state
+                self.keychainAccessDenied = await credentialService.wasAccessDenied()
             }
-            lastFetchTime = Date()
-            // Clear access denied state on success
-            self.keychainAccessDenied = false
-        } catch let error as CredentialError {
-            errorMessage = error.localizedDescription
-            // Track if keychain access was denied
-            if error.isAccessDenied {
-                self.keychainAccessDenied = true
+
+            // Also refresh agent count
+            agentCount = await agentCounter.countAgents()
+
+            // Detect orphans and notify if enabled
+            if orphanNotificationsEnabled {
+                let orphans = await agentCounter.detectOrphanedSubagents()
+                if !orphans.isEmpty {
+                    orphanedSubagents = orphans
+                    await notificationService.notifyOrphansDetected(
+                        count: orphans.count,
+                        pids: orphans.map { $0.pid }
+                    )
+                } else {
+                    orphanedSubagents = []
+                }
             }
-        } catch {
-            errorMessage = error.localizedDescription
-            // Also check credential service for access denied state
-            self.keychainAccessDenied = await credentialService.wasAccessDenied()
+
+            refreshState = .idle
         }
 
-        // Also refresh agent count
-        agentCount = await agentCounter.countAgents()
-
-        // Detect orphans and notify if enabled
-        if orphanNotificationsEnabled {
-            let orphans = await agentCounter.detectOrphanedSubagents()
-            if !orphans.isEmpty {
-                orphanedSubagents = orphans
-                await notificationService.notifyOrphansDetected(
-                    count: orphans.count,
-                    pids: orphans.map { $0.pid }
-                )
-            } else {
-                orphanedSubagents = []
-            }
-        }
-
-        refreshState = .idle
+        await currentRefreshTask?.value
     }
 
     func refreshAgentCount() async {
