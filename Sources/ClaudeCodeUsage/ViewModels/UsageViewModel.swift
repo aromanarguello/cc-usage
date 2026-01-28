@@ -88,15 +88,46 @@ final class UsageViewModel {
     @ObservationIgnored
     @AppStorage("refreshInterval") private var refreshInterval: Double = 60
 
+    /// Time elapsed since last successful data fetch
+    var dataAge: TimeInterval {
+        guard let lastFetchTime else { return .infinity }
+        return Date().timeIntervalSince(lastFetchTime)
+    }
+
+    /// Whether data is considered stale (> 10 minutes old)
+    var isDataStale: Bool {
+        dataAge > 600  // 10 minutes
+    }
+
+    /// Staleness tier for UI display
+    var stalenessTier: StalenessTier {
+        let age = dataAge
+        if age < 120 { return .fresh }      // < 2 min
+        if age < 600 { return .recent }     // 2-10 min
+        if age < 3600 { return .stale }     // 10-60 min
+        return .veryStale                    // > 1 hour
+    }
+
     var timeSinceUpdate: String {
         guard let lastFetchTime else { return "Never" }
         let seconds = Int(Date().timeIntervalSince(lastFetchTime))
+
+        let timeString: String
         if seconds < 60 {
-            return "\(seconds) sec ago"
-        } else {
+            timeString = "\(seconds) sec ago"
+        } else if seconds < 3600 {
             let minutes = seconds / 60
-            return "\(minutes) min ago"
+            timeString = "\(minutes) min ago"
+        } else {
+            let hours = seconds / 3600
+            timeString = "\(hours) hr ago"
         }
+
+        // Add "Stale:" prefix for old data
+        if isDataStale {
+            return "Stale: \(timeString)"
+        }
+        return timeString
     }
 
     init(apiService: UsageAPIService, credentialService: CredentialService) {
