@@ -13,8 +13,6 @@ struct UsagePopoverView: View {
     @State private var isKillingAllAgents = false
     @State private var showTroubleshooting = false
 
-    private let updateChecker = UpdateChecker()
-
     enum UpdateAlertType: Identifiable {
         case available(version: String, url: String?)
         case upToDate
@@ -150,20 +148,28 @@ struct UsagePopoverView: View {
                         .font(.caption)
                 }
 
-                Text("Updated \(viewModel.timeSinceUpdate)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                // Show state message or time since update
+                if let stateMessage = viewModel.refreshState.statusMessage {
+                    Text(stateMessage)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else {
+                    Text("Updated \(viewModel.timeSinceUpdate)")
+                        .font(.caption)
+                        .foregroundStyle(viewModel.isDataStale ? .orange : .secondary)
+                }
 
                 Spacer()
 
                 Button(action: {
-                    Task { await viewModel.refresh() }
+                    Task { await viewModel.refresh(userInitiated: true) }
                 }) {
                     if viewModel.isLoading {
                         ProgressView()
                             .scaleEffect(0.6)
                     } else {
                         Image(systemName: "arrow.clockwise")
+                            .foregroundStyle(viewModel.refreshState == .needsManualRefresh ? .orange : .secondary)
                     }
                 }
                 .buttonStyle(.plain)
@@ -262,10 +268,17 @@ struct UsagePopoverView: View {
     }
 
     private func checkForUpdates() {
+        // If we already have cached update info from background check, use it directly
+        if let version = viewModel.latestVersion {
+            updateAlert = .available(version: version, url: viewModel.downloadURL)
+            return
+        }
+
+        // Otherwise, perform a fresh check
         isCheckingUpdate = true
         Task {
             do {
-                let result = try await updateChecker.checkForUpdates()
+                let result = try await UpdateChecker().checkForUpdates()
                 await MainActor.run {
                     if result.updateAvailable {
                         updateAlert = .available(version: result.latestVersion, url: result.downloadURL)
