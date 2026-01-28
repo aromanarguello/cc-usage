@@ -50,6 +50,17 @@ enum StalenessTier {
     }
 }
 
+enum RefreshError: Error, LocalizedError {
+    case timeout
+
+    var errorDescription: String? {
+        switch self {
+        case .timeout:
+            return "Request timed out. Tap to retry."
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class UsageViewModel {
@@ -70,6 +81,7 @@ final class UsageViewModel {
     private var lastUpdateCheck: Date?
     private let updateCheckInterval: TimeInterval = 2 * 60 * 60 // 2 hours
     private let wakeDelaySeconds: TimeInterval = 45
+    private let refreshTimeoutSeconds: TimeInterval = 30
     private let updateChecker = UpdateChecker()
 
     @ObservationIgnored
@@ -166,6 +178,26 @@ final class UsageViewModel {
         Task { await refresh() }
     }
 
+    /// Wraps an async operation with a timeout
+    private func withTimeout<T: Sendable>(
+        seconds: TimeInterval,
+        operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(seconds))
+                throw RefreshError.timeout
+            }
+
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
+    }
+
     func refresh(userInitiated: Bool = false) async {
         guard refreshState.canAutoRefresh || refreshState == .needsManualRefresh else { return }
 
@@ -189,7 +221,9 @@ final class UsageViewModel {
         errorMessage = nil
 
         do {
-            usageData = try await apiService.fetchUsage()
+            usageData = try await withTimeout(seconds: refreshTimeoutSeconds) {
+                try await self.apiService.fetchUsage()
+            }
             lastFetchTime = Date()
             // Clear access denied state on success
             self.keychainAccessDenied = false
