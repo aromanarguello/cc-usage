@@ -61,6 +61,7 @@ final class MenuBarController: ObservableObject {
     private func setupWorkspaceObservers() {
         let nc = NSWorkspace.shared.notificationCenter
 
+        // Handle screen wake (restore status item if lost)
         nc.addObserver(
             forName: NSWorkspace.screensDidWakeNotification,
             object: nil,
@@ -71,13 +72,32 @@ final class MenuBarController: ObservableObject {
             }
         }
 
+        // Handle system sleep - pause polling
+        nc.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                #if DEBUG
+                print("[MenuBarController] System sleeping, pausing polling")
+                #endif
+                self?.viewModel.pauseForSleep()
+            }
+        }
+
+        // Handle system wake - resume with delay
         nc.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                #if DEBUG
+                print("[MenuBarController] System woke, resuming after delay")
+                #endif
                 self?.ensureStatusItemExists()
+                self?.viewModel.resumeAfterWake()
             }
         }
     }
@@ -109,9 +129,11 @@ final class MenuBarController: ObservableObject {
         ensureStatusItemExists()
         guard let button = statusItem?.button else { return }
 
+        var title: String
+
         if let data = viewModel.usageData {
             let percentage = data.fiveHour.percentage
-            button.title = String(format: "%d%%", percentage)
+            title = String(format: "%d%%", percentage)
 
             // Color coding based on usage
             if percentage >= 90 {
@@ -122,12 +144,22 @@ final class MenuBarController: ObservableObject {
                 button.contentTintColor = nil
             }
         } else if viewModel.isLoading {
-            button.title = "..."
+            title = "..."
             button.contentTintColor = nil
         } else if viewModel.errorMessage != nil {
-            button.title = "--"
+            title = "--"
             button.contentTintColor = .systemOrange
+        } else {
+            title = "--%"
+            button.contentTintColor = nil
         }
+
+        // Add update badge if available
+        if viewModel.updateAvailable {
+            title += " ⬆"
+        }
+
+        button.title = title
     }
 
     @objc private func togglePopover() {
@@ -136,6 +168,8 @@ final class MenuBarController: ObservableObject {
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            // Clear update badge when user opens popover
+            viewModel.acknowledgeUpdate()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             // Refresh when opening popover
             Task { await viewModel.refresh() }
@@ -146,6 +180,8 @@ final class MenuBarController: ObservableObject {
         guard let button = statusItem?.button, let popover = popover else { return }
 
         if !popover.isShown {
+            // Clear update badge when user opens popover
+            viewModel.acknowledgeUpdate()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             Task { await viewModel.refresh() }
         }
