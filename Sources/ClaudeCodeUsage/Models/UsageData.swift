@@ -6,7 +6,7 @@ struct UsageData: Sendable {
     let sevenDaySonnet: UsageWindow?
     let sevenDayOpus: UsageWindow?
     let extraUsage: ExtraUsage?
-    let subscription: String
+    let subscription: String?
     let lastUpdated: Date
 
     struct UsageWindow: Sendable {
@@ -63,7 +63,7 @@ struct UsageData: Sendable {
         sevenDaySonnet: UsageWindow(utilization: 0.25, resetsAt: Date().addingTimeInterval(5 * 24 * 3600)),
         sevenDayOpus: nil,
         extraUsage: ExtraUsage(utilization: 44.9, usedCredits: 898, monthlyLimit: 2000, isEnabled: true),
-        subscription: "Pro",
+        subscription: nil,  // No longer hardcoded - reflects reality
         lastUpdated: Date()
     )
 }
@@ -145,7 +145,7 @@ struct UsageAPIResponse: Decodable {
                     isEnabled: response.isEnabled
                 )
             },
-            subscription: "Max",  // Could be read from keychain if needed
+            subscription: nil,  // API doesn't provide subscription info
             lastUpdated: Date()
         )
     }
