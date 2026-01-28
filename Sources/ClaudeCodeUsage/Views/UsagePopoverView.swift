@@ -43,7 +43,7 @@ struct UsagePopoverView: View {
 
                 Button(action: { showSettings = true }) {
                     Image(systemName: "gearshape")
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
 
@@ -52,7 +52,7 @@ struct UsagePopoverView: View {
                     Text(subscription)
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .foregroundColor(.white)
+                        .foregroundStyle(.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(Color.orange)
@@ -146,13 +146,13 @@ struct UsagePopoverView: View {
             HStack {
                 if viewModel.errorMessage != nil, viewModel.usageData != nil {
                     Image(systemName: "exclamationmark.circle")
-                        .foregroundColor(.orange)
+                        .foregroundStyle(.orange)
                         .font(.caption)
                 }
 
                 Text("Updated \(viewModel.timeSinceUpdate)")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
 
                 Spacer()
 
@@ -301,7 +301,7 @@ struct UsagePopoverView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center) {
                 Image(systemName: icon)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 Text(title)
                 Spacer()
                 Text("\(window.percentage)%")
@@ -314,7 +314,7 @@ struct UsagePopoverView: View {
 
             Text("\(resetPrefix) \(window.timeUntilReset())")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
         }
         .padding()
     }
@@ -327,7 +327,7 @@ struct UsagePopoverView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center) {
                 Image(systemName: "bolt.horizontal.circle")
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 Text("Active Agents")
                 Spacer()
                 Text("\(agents.total)")
@@ -366,7 +366,7 @@ struct UsagePopoverView: View {
                         .frame(width: 6, height: 6)
                     Text("\(agents.sessions) sessions")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
 
                 HStack(spacing: 4) {
@@ -375,7 +375,7 @@ struct UsagePopoverView: View {
                         .frame(width: 6, height: 6)
                     Text("\(agents.subagents) subagents")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
 
                 Spacer()
@@ -384,10 +384,10 @@ struct UsagePopoverView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "memorychip")
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     Text(formatMemory(agents.totalMemoryMB))
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
 
                 // Kill All button (only when subagents > 0)
@@ -399,7 +399,7 @@ struct UsagePopoverView: View {
                         } else {
                             Text("Kill All")
                                 .font(.caption)
-                                .foregroundColor(.red)
+                                .foregroundStyle(.red)
                         }
                     }
                     .buttonStyle(.plain)
@@ -423,7 +423,7 @@ struct UsagePopoverView: View {
     private func hangingAgentsWarning(count: Int) -> some View {
         HStack {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.orange)
+                .foregroundStyle(.orange)
 
             Text("\(count) hanging agent\(count == 1 ? "" : "s") (>3h)")
                 .font(.callout)
@@ -436,7 +436,7 @@ struct UsagePopoverView: View {
                         .scaleEffect(0.6)
                 } else {
                     Text("Kill")
-                        .foregroundColor(.red)
+                        .foregroundStyle(.red)
                 }
             }
             .buttonStyle(.plain)
@@ -451,7 +451,7 @@ struct UsagePopoverView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center) {
                 Image(systemName: "dollarsign.circle")
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 Text("Extra Usage")
                 Spacer()
                 Text("\(extraUsage.percentage)%")
@@ -464,7 +464,7 @@ struct UsagePopoverView: View {
 
             Text("\(extraUsage.usedUSD) / \(extraUsage.limitUSD) this month")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
         }
         .padding()
     }
@@ -481,7 +481,7 @@ struct UsagePopoverView: View {
                     .frame(width: 56, height: 56)
                 Image(systemName: "lock.shield.fill")
                     .font(.system(size: 24))
-                    .foregroundColor(.orange)
+                    .foregroundStyle(.orange)
             }
 
             // Title and explanation
@@ -492,7 +492,7 @@ struct UsagePopoverView: View {
 
                 Text("macOS denied access to your Claude Code credentials stored in Keychain.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -502,7 +502,7 @@ struct UsagePopoverView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "info.circle.fill")
                         .font(.caption)
-                        .foregroundColor(.blue)
+                        .foregroundStyle(.blue)
                     Text("Why this happens")
                         .font(.caption)
                         .fontWeight(.medium)
@@ -510,7 +510,7 @@ struct UsagePopoverView: View {
 
                 Text("This app reads OAuth tokens from Claude Code CLI to show your usage. When you click \"Don't Allow\" on the keychain prompt, macOS blocks access.")
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(10)
@@ -530,7 +530,7 @@ struct UsagePopoverView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
                 .background(Color.orange)
-                .foregroundColor(.white)
+                .foregroundStyle(.white)
                 .fontWeight(.medium)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
@@ -546,7 +546,7 @@ struct UsagePopoverView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
                 .background(Color.secondary.opacity(0.15))
-                .foregroundColor(.primary)
+                .foregroundStyle(.primary)
                 .fontWeight(.medium)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
@@ -556,7 +556,7 @@ struct UsagePopoverView: View {
             VStack(spacing: 4) {
                 Text("Or re-authenticate in terminal:")
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
 
                 HStack(spacing: 6) {
                     Text("claude")
@@ -568,7 +568,7 @@ struct UsagePopoverView: View {
                     }) {
                         Image(systemName: "doc.on.doc")
                             .font(.caption2)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -589,7 +589,7 @@ struct UsagePopoverView: View {
             // Warning icon
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 36))
-                .foregroundColor(.orange)
+                .foregroundStyle(.orange)
 
             // Message
             VStack(spacing: 8) {
@@ -599,7 +599,7 @@ struct UsagePopoverView: View {
 
                 Text("Run Claude Code in terminal to authenticate with your Claude account.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
 
@@ -607,7 +607,7 @@ struct UsagePopoverView: View {
             VStack(spacing: 8) {
                 Text("Run in terminal:")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
 
                 HStack {
                     Text("claude")
@@ -620,7 +620,7 @@ struct UsagePopoverView: View {
                         NSPasteboard.general.setString("claude", forType: .string)
                     }) {
                         Image(systemName: "doc.on.doc")
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -633,7 +633,7 @@ struct UsagePopoverView: View {
             VStack(spacing: 4) {
                 Text("This app uses OAuth credentials from Claude Code CLI.")
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
 
@@ -645,7 +645,7 @@ struct UsagePopoverView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .background(Color.blue)
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
                     .fontWeight(.medium)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
@@ -656,12 +656,12 @@ struct UsagePopoverView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("If you've already authenticated but still see this error, your credentials may exist but the app can't access them due to macOS keychain permissions.")
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
                     Text("Workaround: Set the token via environment variable before launching:")
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
                     let workaroundCommand = "export CLAUDE_USAGE_OAUTH_TOKEN=$(security find-generic-password -s 'Claude Code-credentials' -w | jq -r '.claudeAiOauth.accessToken')"
@@ -669,7 +669,7 @@ struct UsagePopoverView: View {
                     HStack(alignment: .top) {
                         Text(workaroundCommand)
                             .font(.system(.caption2, design: .monospaced))
-                            .foregroundColor(.primary)
+                            .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
 
                         Spacer()
@@ -679,7 +679,7 @@ struct UsagePopoverView: View {
                             NSPasteboard.general.setString(workaroundCommand, forType: .string)
                         }) {
                             Image(systemName: "doc.on.doc")
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
                     }
@@ -689,14 +689,14 @@ struct UsagePopoverView: View {
 
                     Text("Then run the app from that terminal session, or add to your shell profile.")
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.top, 8)
             } label: {
                 Text("Having trouble?")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(24)
