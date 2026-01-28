@@ -188,7 +188,7 @@ final class MenuBarController: ObservableObject {
             viewModel.acknowledgeUpdate()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             // Refresh when opening popover
-            Task { await viewModel.refresh() }
+            Task { await viewModel.refresh(userInitiated: true) }
         }
     }
 
@@ -199,7 +199,7 @@ final class MenuBarController: ObservableObject {
             // Clear update badge when user opens popover
             viewModel.acknowledgeUpdate()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            Task { await viewModel.refresh() }
+            Task { await viewModel.refresh(userInitiated: true) }
         }
     }
 
