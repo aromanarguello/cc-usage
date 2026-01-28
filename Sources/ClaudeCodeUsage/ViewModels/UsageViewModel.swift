@@ -33,6 +33,23 @@ enum RefreshState: Equatable {
     }
 }
 
+/// Indicates how stale the usage data is
+enum StalenessTier {
+    case fresh      // < 2 min - Green, normal
+    case recent     // 2-10 min - Default color
+    case stale      // 10-60 min - Orange
+    case veryStale  // > 1 hour - Red with warning
+
+    var color: Color {
+        switch self {
+        case .fresh: return .green
+        case .recent: return .secondary
+        case .stale: return .orange
+        case .veryStale: return .red
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class UsageViewModel {
@@ -52,6 +69,7 @@ final class UsageViewModel {
     private(set) var downloadURL: String?
     private var lastUpdateCheck: Date?
     private let updateCheckInterval: TimeInterval = 2 * 60 * 60 // 2 hours
+    private let wakeDelaySeconds: TimeInterval = 45
     private let updateChecker = UpdateChecker()
 
     @ObservationIgnored
@@ -238,5 +256,24 @@ final class UsageViewModel {
     func stopPolling() {
         pollingTask?.cancel()
         pollingTask = nil
+    }
+
+    /// Called when Mac is about to sleep - pauses all automatic refreshes
+    func pauseForSleep() {
+        stopPolling()
+        refreshState = .pausedForSleep
+    }
+
+    /// Called when Mac wakes - waits before resuming to let system stabilize
+    func resumeAfterWake() {
+        let resumeAt = Date().addingTimeInterval(wakeDelaySeconds)
+        refreshState = .wakingUp(resumeAt: resumeAt)
+
+        Task {
+            try? await Task.sleep(for: .seconds(wakeDelaySeconds))
+            guard case .wakingUp = refreshState else { return }
+            refreshState = .idle
+            startPolling()
+        }
     }
 }
