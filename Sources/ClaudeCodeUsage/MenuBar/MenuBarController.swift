@@ -154,6 +154,22 @@ final class MenuBarController: ObservableObject {
             button.contentTintColor = nil
         }
 
+        // Add stale indicator if data is old
+        if viewModel.isDataStale {
+            button.contentTintColor = .systemOrange
+        }
+
+        // Add wake status indicator
+        if case .wakingUp = viewModel.refreshState {
+            title = "..."
+            button.contentTintColor = .systemBlue
+        }
+
+        if case .needsManualRefresh = viewModel.refreshState {
+            title += " !"
+            button.contentTintColor = .systemOrange
+        }
+
         // Add update badge if available
         if viewModel.updateAvailable {
             title += " ⬆"
