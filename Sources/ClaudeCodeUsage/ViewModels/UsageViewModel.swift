@@ -166,8 +166,17 @@ final class UsageViewModel {
         Task { await refresh() }
     }
 
-    func refresh() async {
+    func refresh(userInitiated: Bool = false) async {
         guard refreshState.canAutoRefresh || refreshState == .needsManualRefresh else { return }
+
+        // For automatic refreshes, check if we can proceed without prompting
+        if !userInitiated {
+            let canRefresh = await canRefreshSilently()
+            if !canRefresh {
+                refreshState = .needsManualRefresh
+                return
+            }
+        }
 
         // Show onboarding on first run before keychain access
         if !hasCompletedOnboardingStorage && usageData == nil && !keychainAccessDenied {
@@ -250,7 +259,7 @@ final class UsageViewModel {
 
         pollingTask = Task {
             while !Task.isCancelled {
-                await refresh()
+                await refresh(userInitiated: false)
                 await checkForUpdateIfNeeded()
                 try? await Task.sleep(for: .seconds(refreshInterval))
             }
@@ -305,6 +314,26 @@ final class UsageViewModel {
             guard case .wakingUp = refreshState else { return }
             refreshState = .idle
             startPolling()
+        }
+    }
+
+    /// Checks if automatic refresh can proceed without user interaction
+    /// Returns false if keychain access would require user prompt
+    private func canRefreshSilently() async -> Bool {
+        // If we have cached credentials, we can refresh silently
+        if await credentialService.hasCachedToken() {
+            return true
+        }
+
+        // Check if keychain access would require interaction
+        let status = await credentialService.preflightClaudeKeychainAccess()
+        switch status {
+        case .allowed:
+            return true
+        case .interactionRequired:
+            return false
+        case .notFound, .failure:
+            return true  // Let it fail naturally with proper error handling
         }
     }
 }
