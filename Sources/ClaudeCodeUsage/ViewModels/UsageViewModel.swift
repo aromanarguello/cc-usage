@@ -38,7 +38,8 @@ enum RefreshState: Equatable {
 final class UsageViewModel {
     private(set) var usageData: UsageData?
     private(set) var errorMessage: String?
-    private(set) var isLoading = false
+    private(set) var refreshState: RefreshState = .idle
+    var isLoading: Bool { refreshState.isLoading }
     private(set) var lastFetchTime: Date?
     private(set) var agentCount: AgentCount?
     private(set) var orphanedSubagents: [ProcessInfo] = []
@@ -117,16 +118,16 @@ final class UsageViewModel {
     }
 
     func refresh() async {
-        guard !isLoading else { return }
+        guard refreshState.canAutoRefresh || refreshState == .needsManualRefresh else { return }
 
         // Show onboarding on first run before keychain access
         if !hasCompletedOnboardingStorage && usageData == nil && !keychainAccessDenied {
             showOnboarding = true
-            isLoading = false
+            refreshState = .idle
             return
         }
 
-        isLoading = true
+        refreshState = .loading
         errorMessage = nil
 
         do {
@@ -163,7 +164,7 @@ final class UsageViewModel {
             }
         }
 
-        isLoading = false
+        refreshState = .idle
     }
 
     func refreshAgentCount() async {
