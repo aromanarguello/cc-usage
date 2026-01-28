@@ -307,6 +307,7 @@ struct UsagePopoverView: View {
                 Text("\(window.percentage)%")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .monospacedDigit()
+                    .foregroundStyle(.primary)
             }
 
             UsageBarView(progress: window.utilization, color: color)
@@ -332,6 +333,7 @@ struct UsagePopoverView: View {
                 Text("\(agents.total)")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .monospacedDigit()
+                    .foregroundStyle(.primary)
             }
 
             // Segmented bar showing sessions vs subagents
@@ -455,6 +457,7 @@ struct UsagePopoverView: View {
                 Text("\(extraUsage.percentage)%")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .monospacedDigit()
+                    .foregroundStyle(.primary)
             }
 
             UsageBarView(progress: extraUsage.utilization / 100.0, color: Color(hex: "38BDF8"))
