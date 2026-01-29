@@ -132,16 +132,30 @@ final class MenuBarController: ObservableObject {
         var title: String
 
         if let data = viewModel.usageData {
-            let percentage = data.fiveHour.percentage
-            title = String(format: "%d%%", percentage)
+            title = data.menuBarDisplay
 
-            // Color coding based on usage
-            if percentage >= 90 {
+            // Clear any previous image
+            button.image = nil
+
+            if data.isFullyBlocked {
+                // Fully blocked - red with hourglass icon
                 button.contentTintColor = .systemRed
-            } else if percentage >= 70 {
-                button.contentTintColor = .systemOrange
+                button.image = NSImage(systemSymbolName: "hourglass.circle", accessibilityDescription: "Rate limited")
+                button.image?.size = NSSize(width: 14, height: 14)
+                button.imagePosition = .imageLeading
+            } else if data.isUsingExtraUsage {
+                // Using extra budget - cyan to indicate spending
+                button.contentTintColor = .systemCyan
             } else {
-                button.contentTintColor = nil
+                // Normal usage - color code by percentage
+                let percentage = data.fiveHour.percentage
+                if percentage >= 90 {
+                    button.contentTintColor = .systemRed
+                } else if percentage >= 70 {
+                    button.contentTintColor = .systemOrange
+                } else {
+                    button.contentTintColor = nil
+                }
             }
         } else if viewModel.isLoading {
             title = "..."

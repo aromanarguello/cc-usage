@@ -57,6 +57,40 @@ struct UsageData: Sendable {
         }
     }
 
+    // MARK: - Menu Bar Display Logic
+
+    /// Included limits are maxed but extra usage budget remains
+    var isUsingExtraUsage: Bool {
+        guard let extra = extraUsage, extra.isEnabled, extra.utilization < 100 else {
+            return false
+        }
+        return fiveHour.percentage >= 100 || sevenDay.percentage >= 100
+    }
+
+    /// No capacity left anywhere - user is fully blocked
+    var isFullyBlocked: Bool {
+        let includedMaxed = fiveHour.percentage >= 100 || sevenDay.percentage >= 100
+        guard includedMaxed else { return false }
+        if let extra = extraUsage, extra.isEnabled {
+            return extra.utilization >= 100
+        }
+        return true
+    }
+
+    /// The text to show in the menu bar
+    var menuBarDisplay: String {
+        if isUsingExtraUsage, let extra = extraUsage {
+            return extra.usedUSD
+        }
+        if isFullyBlocked {
+            if let extra = extraUsage, extra.isEnabled {
+                return extra.usedUSD
+            }
+            return "100%"
+        }
+        return String(format: "%d%%", fiveHour.percentage)
+    }
+
     static let placeholder = UsageData(
         fiveHour: UsageWindow(utilization: 0.20, resetsAt: Date().addingTimeInterval(4 * 3600 + 54 * 60)),
         sevenDay: UsageWindow(utilization: 0.51, resetsAt: Date().addingTimeInterval(5 * 24 * 3600)),
