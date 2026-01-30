@@ -652,7 +652,7 @@ struct UsagePopoverView: View {
 
             // Retry button
             Button(action: {
-                Task { await viewModel.refresh() }
+                Task { await viewModel.refresh(userInitiated: true) }
             }) {
                 Text("Retry")
                     .frame(maxWidth: .infinity)
