@@ -72,7 +72,7 @@ final class MenuBarController: ObservableObject {
             }
         }
 
-        // Handle system sleep - pause polling
+        // Handle system sleep - pause polling and warm cache
         nc.addObserver(
             forName: NSWorkspace.willSleepNotification,
             object: nil,
@@ -80,9 +80,9 @@ final class MenuBarController: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in
                 #if DEBUG
-                print("[MenuBarController] System sleeping, pausing polling")
+                print("[MenuBarController] System sleeping, warming cache and pausing polling")
                 #endif
-                self?.viewModel.pauseForSleep()
+                await self?.viewModel.pauseForSleep()
             }
         }
 

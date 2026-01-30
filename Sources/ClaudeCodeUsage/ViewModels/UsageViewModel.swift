@@ -343,8 +343,14 @@ final class UsageViewModel {
     }
 
     /// Called when Mac is about to sleep - pauses all automatic refreshes
-    func pauseForSleep() {
+    /// and attempts to warm the credential cache
+    func pauseForSleep() async {
         stopPolling()
+
+        // Warm credential cache before sleep
+        // This ensures we have a fresh token when we wake
+        _ = await credentialService.warmCacheForSleep()
+
         refreshState = .pausedForSleep
     }
 

@@ -412,6 +412,24 @@ actor CredentialService {
         lastDenialTimestamp = nil  // Reset so it will prompt for access again
     }
 
+    /// Attempts to warm the token cache before sleep
+    /// This ensures we have a fresh token in the app's keychain cache
+    /// Returns true if cache was warmed successfully
+    func warmCacheForSleep() async -> Bool {
+        // If we already have a warm cache, no need to refresh
+        if isTokenCacheWarm && cachedToken != nil {
+            return true
+        }
+
+        // Try to get token (will cache if successful)
+        do {
+            _ = try getAccessToken()
+            return cachedToken != nil
+        } catch {
+            return false
+        }
+    }
+
     /// Gets the Claude Code OAuth token from keychain
     private func getClaudeCodeToken() throws -> String {
         let query: [String: Any] = [
