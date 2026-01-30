@@ -429,7 +429,17 @@ final class UsageViewModel {
     /// Checks if automatic refresh can proceed without user interaction
     /// Returns false if keychain access would require user prompt
     private func canRefreshSilently() async -> Bool {
-        // If we have cached credentials, we can refresh silently
+        // Environment variable always works
+        if await credentialService.hasEnvironmentToken() {
+            return true
+        }
+
+        // If we have a warm cached token, we can definitely refresh
+        if await credentialService.hasWarmCachedToken() {
+            return true
+        }
+
+        // If we have any cached token (memory or app keychain), try it
         if await credentialService.hasCachedToken() {
             return true
         }

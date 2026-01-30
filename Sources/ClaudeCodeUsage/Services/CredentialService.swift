@@ -588,4 +588,10 @@ actor CredentialService {
     func hasCachedToken() -> Bool {
         return cachedToken != nil || getTokenFromAppCache() != nil
     }
+
+    /// Returns true if we have a recently cached token that's likely still valid
+    /// This is a stronger signal than hasCachedToken() for automatic refresh decisions
+    func hasWarmCachedToken() -> Bool {
+        return isTokenCacheWarm && cachedToken != nil
+    }
 }
