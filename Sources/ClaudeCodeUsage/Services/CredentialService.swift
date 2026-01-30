@@ -78,6 +78,15 @@ actor CredentialService {
     // In-memory token cache - cleared on 401 or app restart
     private var cachedToken: String?
 
+    // Track when token was last cached (for freshness decisions)
+    private var tokenCacheTimestamp: Date?
+
+    // Token cache is considered "warm" if cached within last 6 hours
+    private var isTokenCacheWarm: Bool {
+        guard let timestamp = tokenCacheTimestamp else { return false }
+        return Date().timeIntervalSince(timestamp) < 6 * 60 * 60
+    }
+
     /// Tracks where the last successful credential came from
     private(set) var lastCredentialSource: CredentialSource?
 
@@ -345,6 +354,7 @@ actor CredentialService {
         // 3. Check app's own keychain cache (survives app restarts, no ACL issues)
         if let appCachedToken = getTokenFromAppCache() {
             cachedToken = appCachedToken  // Also store in memory for speed
+            tokenCacheTimestamp = Date()
             lastCredentialSource = .appCache
             return appCachedToken
         }
@@ -352,6 +362,7 @@ actor CredentialService {
         // 4. Check file-based credentials (used on Linux, may exist on Mac)
         if let fileToken = getTokenFromFile() {
             cachedToken = fileToken
+            tokenCacheTimestamp = Date()
             // Also cache in app's keychain for consistency
             cacheTokenInAppKeychain(fileToken)
             lastCredentialSource = .file
@@ -368,6 +379,7 @@ actor CredentialService {
             let token = try getClaudeCodeToken()
             // Cache in memory
             cachedToken = token
+            tokenCacheTimestamp = Date()
             // Also cache in app's keychain for future use (avoids repeated prompts)
             cacheTokenInAppKeychain(token)
             lastCredentialSource = .keychain
@@ -385,6 +397,7 @@ actor CredentialService {
     /// Called when API returns 401 (token expired/invalid)
     func invalidateCache() {
         cachedToken = nil
+        tokenCacheTimestamp = nil
         cachedManualKey = nil
         // Also clear the app's keychain cache since the token is invalid
         clearAppKeychainCache()
@@ -394,6 +407,7 @@ actor CredentialService {
     /// Forces full re-authentication from Claude Code's keychain
     func clearTokenCache() {
         cachedToken = nil
+        tokenCacheTimestamp = nil
         clearAppKeychainCache()
         lastDenialTimestamp = nil  // Reset so it will prompt for access again
     }
