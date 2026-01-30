@@ -176,7 +176,7 @@ final class UsageViewModel {
     func completeOnboarding() {
         hasCompletedOnboardingStorage = true
         showOnboarding = false
-        Task { await refresh() }
+        Task { await refresh(userInitiated: true) }
     }
 
     /// Wraps an async operation with a timeout
