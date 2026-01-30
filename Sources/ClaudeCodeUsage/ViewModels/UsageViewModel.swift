@@ -82,6 +82,8 @@ final class UsageViewModel {
     private let updateCheckInterval: TimeInterval = 2 * 60 * 60 // 2 hours
     private let wakeDelaySeconds: TimeInterval = 5
     private let refreshTimeoutSeconds: TimeInterval = 30
+    private let maxRetryAttempts = 3
+    private let initialRetryDelaySeconds: TimeInterval = 2
     private let updateChecker = UpdateChecker()
 
     @ObservationIgnored
@@ -199,6 +201,23 @@ final class UsageViewModel {
         }
     }
 
+    /// Determines if an error is likely transient and worth retrying
+    private func isTransientError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut, .networkConnectionLost, .notConnectedToInternet,
+                 .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed:
+                return true
+            default:
+                return false
+            }
+        }
+        if error is RefreshError {
+            return true  // Our timeout is retryable
+        }
+        return false
+    }
+
     func refresh(userInitiated: Bool = false) async {
         // Cancel any stuck previous refresh if user-initiated
         if userInitiated {
@@ -227,22 +246,49 @@ final class UsageViewModel {
         errorMessage = nil
 
         currentRefreshTask = Task {
-            do {
-                usageData = try await withTimeout(seconds: refreshTimeoutSeconds) {
-                    try await self.apiService.fetchUsage()
+            var lastError: Error?
+            var attemptCount = 0
+
+            while attemptCount < maxRetryAttempts {
+                do {
+                    usageData = try await withTimeout(seconds: refreshTimeoutSeconds) {
+                        try await self.apiService.fetchUsage()
+                    }
+                    lastFetchTime = Date()
+                    self.keychainAccessDenied = false
+                    lastError = nil
+                    break  // Success, exit retry loop
+                } catch let error as CredentialError {
+                    // Credential errors are not retryable
+                    lastError = error
+                    errorMessage = error.localizedDescription
+                    if error.isAccessDenied {
+                        self.keychainAccessDenied = true
+                    }
+                    break  // Don't retry credential errors
+                } catch {
+                    lastError = error
+                    attemptCount += 1
+
+                    // Only retry transient errors
+                    if isTransientError(error) && attemptCount < maxRetryAttempts {
+                        let delay = initialRetryDelaySeconds * pow(2, Double(attemptCount - 1))
+                        #if DEBUG
+                        print("[UsageViewModel] Transient error, retrying in \(delay)s (attempt \(attemptCount)/\(maxRetryAttempts))")
+                        #endif
+                        try? await Task.sleep(for: .seconds(delay))
+                        if Task.isCancelled { break }
+                    } else {
+                        errorMessage = error.localizedDescription
+                        self.keychainAccessDenied = await credentialService.wasAccessDenied()
+                        break
+                    }
                 }
-                lastFetchTime = Date()
-                // Clear access denied state on success
-                self.keychainAccessDenied = false
-            } catch let error as CredentialError {
+            }
+
+            // Set error message if all retries failed
+            if let error = lastError, errorMessage == nil {
                 errorMessage = error.localizedDescription
-                // Track if keychain access was denied
-                if error.isAccessDenied {
-                    self.keychainAccessDenied = true
-                }
-            } catch {
-                errorMessage = error.localizedDescription
-                // Also check credential service for access denied state
                 self.keychainAccessDenied = await credentialService.wasAccessDenied()
             }
 
