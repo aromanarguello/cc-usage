@@ -80,7 +80,7 @@ final class UsageViewModel {
     private(set) var downloadURL: String?
     private var lastUpdateCheck: Date?
     private let updateCheckInterval: TimeInterval = 2 * 60 * 60 // 2 hours
-    private let wakeDelaySeconds: TimeInterval = 45
+    private let wakeDelaySeconds: TimeInterval = 5
     private let refreshTimeoutSeconds: TimeInterval = 30
     private let updateChecker = UpdateChecker()
 
@@ -354,16 +354,29 @@ final class UsageViewModel {
         refreshState = .pausedForSleep
     }
 
-    /// Called when Mac wakes - waits before resuming to let system stabilize
+    /// Called when Mac wakes - attempts immediate refresh if cache is warm,
+    /// otherwise waits briefly before resuming
     func resumeAfterWake() {
-        let resumeAt = Date().addingTimeInterval(wakeDelaySeconds)
-        refreshState = .wakingUp(resumeAt: resumeAt)
-
         Task {
-            try? await Task.sleep(for: .seconds(wakeDelaySeconds))
-            guard case .wakingUp = refreshState else { return }
-            refreshState = .idle
-            startPolling()
+            // First, try an immediate refresh if we have cached credentials
+            // This provides instant feedback when cache is warm
+            let canRefresh = await canRefreshSilently()
+
+            if canRefresh {
+                // Cache is warm, try immediate refresh
+                refreshState = .loading
+                await refresh(userInitiated: false)
+                startPolling()
+            } else {
+                // Cache cold or interaction required - wait briefly then resume
+                let resumeAt = Date().addingTimeInterval(wakeDelaySeconds)
+                refreshState = .wakingUp(resumeAt: resumeAt)
+
+                try? await Task.sleep(for: .seconds(wakeDelaySeconds))
+                guard case .wakingUp = refreshState else { return }
+                refreshState = .idle
+                startPolling()
+            }
         }
     }
 
