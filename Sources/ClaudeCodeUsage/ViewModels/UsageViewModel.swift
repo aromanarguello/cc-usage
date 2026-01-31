@@ -222,6 +222,8 @@ final class UsageViewModel {
         // Cancel any stuck previous refresh if user-initiated
         if userInitiated {
             currentRefreshTask?.cancel()
+            // Clear the keychain denial cooldown when user manually retries
+            await credentialService.clearAccessDeniedState()
         }
 
         guard refreshState.canAutoRefresh || refreshState == .needsManualRefresh || userInitiated else { return }
@@ -230,6 +232,9 @@ final class UsageViewModel {
         if !userInitiated {
             let canRefresh = await canRefreshSilently()
             if !canRefresh {
+                #if DEBUG
+                print("[UsageViewModel] Auto-refresh blocked: canRefreshSilently() returned false")
+                #endif
                 refreshState = .needsManualRefresh
                 return
             }
@@ -348,6 +353,19 @@ final class UsageViewModel {
         stopPolling()
 
         pollingTask = Task {
+            // Bootstrap: If onboarding is complete but we have no cached token,
+            // do a user-initiated refresh to populate the cache.
+            // This prevents getting stuck in needsManualRefresh on app launch.
+            if hasCompletedOnboardingStorage {
+                let canRefresh = await canRefreshSilently()
+                if !canRefresh {
+                    #if DEBUG
+                    print("[UsageViewModel] Bootstrap refresh: no cached credentials, doing user-initiated refresh")
+                    #endif
+                    await refresh(userInitiated: true)
+                }
+            }
+
             while !Task.isCancelled {
                 await refresh(userInitiated: false)
                 await checkForUpdateIfNeeded()

@@ -247,7 +247,12 @@ actor CredentialService {
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked
         ]
-        SecItemAdd(addQuery as CFDictionary, nil)
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        #if DEBUG
+        if status != errSecSuccess {
+            print("[CredentialService] Failed to cache token in app keychain: \(status)")
+        }
+        #endif
     }
 
     /// Retrieves token from app's own keychain cache

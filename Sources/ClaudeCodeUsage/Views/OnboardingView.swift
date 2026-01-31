@@ -23,7 +23,7 @@ struct OnboardingView: View {
             // Explanation
             Text("This app reads your Claude Code credentials to display usage data.")
                 .font(.callout)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             // Instructions card
@@ -56,11 +56,11 @@ struct OnboardingView: View {
             // Important note
             HStack(spacing: 8) {
                 Image(systemName: "info.circle.fill")
-                    .foregroundColor(.orange)
+                    .foregroundStyle(.orange)
                     .font(.caption)
                 Text("\"Always Allow\" prevents repeated prompts")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
@@ -73,7 +73,7 @@ struct OnboardingView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
                     .background(Color.blue)
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             .buttonStyle(.plain)
@@ -88,7 +88,7 @@ struct OnboardingView: View {
             Text(number)
                 .font(.caption)
                 .fontWeight(.bold)
-                .foregroundColor(.white)
+                .foregroundStyle(.white)
                 .frame(width: 20, height: 20)
                 .background(Color.blue)
                 .clipShape(Circle())
@@ -104,7 +104,7 @@ struct OnboardingView: View {
             Text(number)
                 .font(.caption)
                 .fontWeight(.bold)
-                .foregroundColor(.white)
+                .foregroundStyle(.white)
                 .frame(width: 20, height: 20)
                 .background(Color.blue)
                 .clipShape(Circle())
@@ -115,7 +115,7 @@ struct OnboardingView: View {
                     .fontWeight(.semibold)
                 Text(detail)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
         }
     }

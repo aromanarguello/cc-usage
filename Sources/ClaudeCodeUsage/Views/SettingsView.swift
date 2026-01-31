@@ -28,7 +28,7 @@ struct SettingsView: View {
             } footer: {
                 Text("Notify when subagents are left running after their parent session ends")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -36,7 +36,7 @@ struct SettingsView: View {
                     Text("Version")
                     Spacer()
                     Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
             }
         }

@@ -130,6 +130,7 @@ final class MenuBarController: ObservableObject {
         guard let button = statusItem?.button else { return }
 
         var title: String
+        var textColor: NSColor? = nil  // nil = system default (white on dark menu bar)
 
         if let data = viewModel.usageData {
             title = data.menuBarDisplay
@@ -139,49 +140,47 @@ final class MenuBarController: ObservableObject {
 
             if data.isFullyBlocked {
                 // Fully blocked - red with hourglass icon
-                button.contentTintColor = .systemRed
-                button.image = NSImage(systemSymbolName: "hourglass.circle", accessibilityDescription: "Rate limited")
-                button.image?.size = NSSize(width: 14, height: 14)
+                textColor = .systemRed
+                let image = NSImage(systemSymbolName: "hourglass.circle", accessibilityDescription: "Rate limited")
+                image?.isTemplate = true  // Adopts system appearance (white on dark menu bars)
+                image?.size = NSSize(width: 14, height: 14)
+                button.image = image
                 button.imagePosition = .imageLeading
             } else if data.isUsingExtraUsage {
                 // Using extra budget - cyan to indicate spending
-                button.contentTintColor = .systemCyan
+                textColor = .systemCyan
             } else {
                 // Normal usage - color code by percentage
                 let percentage = data.fiveHour.percentage
                 if percentage >= 90 {
-                    button.contentTintColor = .systemRed
+                    textColor = .systemRed
                 } else if percentage >= 70 {
-                    button.contentTintColor = .systemOrange
-                } else {
-                    button.contentTintColor = nil
+                    textColor = .systemOrange
                 }
             }
         } else if viewModel.isLoading {
             title = "..."
-            button.contentTintColor = nil
         } else if viewModel.errorMessage != nil {
             title = "--"
-            button.contentTintColor = .systemOrange
+            textColor = .systemOrange
         } else {
             title = "--%"
-            button.contentTintColor = nil
         }
 
         // Add stale indicator if data is old
         if viewModel.isDataStale {
-            button.contentTintColor = .systemOrange
+            textColor = .systemOrange
         }
 
         // Add wake status indicator
         if case .wakingUp = viewModel.refreshState {
             title = "..."
-            button.contentTintColor = .systemBlue
+            textColor = .systemBlue
         }
 
         if case .needsManualRefresh = viewModel.refreshState {
             title += " !"
-            button.contentTintColor = .systemOrange
+            textColor = .systemOrange
         }
 
         // Add update badge if available
@@ -189,7 +188,13 @@ final class MenuBarController: ObservableObject {
             title += " ⬆"
         }
 
-        button.title = title
+        // Apply title with color via attributed string
+        // For menu bar, use controlTextColor as the default (adapts to menu bar appearance)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
+            .foregroundColor: textColor ?? NSColor.controlTextColor
+        ]
+        button.attributedTitle = NSAttributedString(string: title, attributes: attributes)
     }
 
     @objc private func togglePopover() {

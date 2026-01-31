@@ -426,7 +426,7 @@ struct UsagePopoverView: View {
     private func formatMemory(_ mb: Int) -> String {
         if mb >= 1024 {
             let gb = Double(mb) / 1024.0
-            return String(format: "%.1f GB", gb)
+            return gb.formatted(.number.precision(.fractionLength(1))) + " GB"
         } else {
             return "\(mb) MB"
         }

@@ -17,7 +17,7 @@ struct APIKeySettingsView: View {
                 Spacer()
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -36,7 +36,7 @@ struct APIKeySettingsView: View {
 
                         HStack {
                             Image(systemName: "person.badge.key.fill")
-                                .foregroundColor(.green)
+                                .foregroundStyle(.green)
                             Text("Claude Code OAuth")
                                 .font(.callout)
                             Spacer()
@@ -47,7 +47,7 @@ struct APIKeySettingsView: View {
 
                         Text("Credentials are read from Claude Code CLI")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
 
                     Divider()
@@ -63,7 +63,7 @@ struct APIKeySettingsView: View {
 
                         Text("Notify when subagents outlive their parent session")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
 
                     Divider()
@@ -81,7 +81,7 @@ struct APIKeySettingsView: View {
                                         .scaleEffect(0.6)
                                 } else if debugCopied {
                                     Image(systemName: "checkmark")
-                                        .foregroundColor(.green)
+                                        .foregroundStyle(.green)
                                 } else {
                                     Image(systemName: "doc.on.clipboard")
                                 }
@@ -97,7 +97,7 @@ struct APIKeySettingsView: View {
 
                         Text("Copies full JSON from /api/oauth/usage")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
 
                     }
 
@@ -107,11 +107,11 @@ struct APIKeySettingsView: View {
                     HStack {
                         Text("Version")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                         Spacer()
                         Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .padding(.top, 12)
