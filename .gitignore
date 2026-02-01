@@ -16,3 +16,6 @@ release/
 
 # Worktrees
 .worktrees/
+
+# Internal docs/plans
+docs/
