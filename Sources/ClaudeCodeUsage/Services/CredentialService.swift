@@ -75,6 +75,17 @@ actor CredentialService {
     /// Users can set this to bypass keychain access issues
     private let envTokenKey = "CLAUDE_USAGE_OAUTH_TOKEN"
 
+    // App's file-based cache (fallback when keychain ACL broken)
+    private var appCacheDirectory: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config")
+            .appendingPathComponent("claudecodeusage")
+    }
+
+    private var fileCachePath: URL {
+        appCacheDirectory.appendingPathComponent("oauth-cache.json")
+    }
+
     // In-memory token cache - cleared on 401 or app restart
     private var cachedToken: String?
 
