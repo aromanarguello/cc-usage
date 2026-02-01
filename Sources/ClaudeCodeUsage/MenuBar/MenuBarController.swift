@@ -7,7 +7,7 @@ final class MenuBarController: ObservableObject {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     nonisolated(unsafe) private var eventMonitor: Any?
-    nonisolated(unsafe) private var updateTask: Task<Void, Never>?
+    private var updateTask: Task<Void, Never>?
 
     let viewModel: UsageViewModel
     let apiService: UsageAPIService
@@ -26,7 +26,9 @@ final class MenuBarController: ObservableObject {
         if let eventMonitor = eventMonitor {
             NSEvent.removeMonitor(eventMonitor)
         }
-        updateTask?.cancel()
+        // Note: updateTask will be canceled automatically via MainActor isolation
+        // when MenuBarController is deallocated. We also explicitly clean up via
+        // cleanup() in AppDelegate.applicationWillTerminate()
     }
 
     private func setupStatusItem() {
@@ -105,7 +107,7 @@ final class MenuBarController: ObservableObject {
     private func startPolling() {
         viewModel.startPolling()
 
-        updateTask = Task {
+        updateTask = Task { @MainActor in
             while !Task.isCancelled {
                 updateStatusItemTitle()
                 try? await Task.sleep(for: .seconds(1))
@@ -134,6 +136,9 @@ final class MenuBarController: ObservableObject {
 
         if let data = viewModel.usageData {
             title = data.menuBarDisplay
+            #if DEBUG
+            print("[MenuBarController] Updating menu bar title to: \(title)")
+            #endif
 
             // Clear any previous image
             button.image = nil

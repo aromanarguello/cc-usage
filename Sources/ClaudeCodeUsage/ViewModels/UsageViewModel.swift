@@ -229,14 +229,26 @@ final class UsageViewModel {
         guard refreshState.canAutoRefresh || refreshState == .needsManualRefresh || userInitiated else { return }
 
         // For automatic refreshes, check if we can proceed without prompting
+        // However, if we already have data, keep trying - don't block indefinitely
         if !userInitiated {
             let canRefresh = await canRefreshSilently()
             if !canRefresh {
                 #if DEBUG
                 print("[UsageViewModel] Auto-refresh blocked: canRefreshSilently() returned false")
                 #endif
-                refreshState = .needsManualRefresh
-                return
+                // Check if the issue is that interaction is required
+                let status = await credentialService.preflightClaudeKeychainAccess()
+
+                // Only block if we have no data yet OR if interaction is required
+                // For .notFound or .failure, let it fail naturally with proper error handling
+                if usageData == nil || status == .interactionRequired {
+                    refreshState = .needsManualRefresh
+                    return
+                } else {
+                    #if DEBUG
+                    print("[UsageViewModel] Allowing refresh attempt despite credential concerns (status: \(status), have existing data)")
+                    #endif
+                }
             }
         }
 
@@ -262,6 +274,9 @@ final class UsageViewModel {
                     lastFetchTime = Date()
                     self.keychainAccessDenied = false
                     lastError = nil
+                    #if DEBUG
+                    print("[UsageViewModel] Successfully fetched usage data: \(usageData?.fiveHour.percentage ?? -1)%")
+                    #endif
                     break  // Success, exit retry loop
                 } catch let error as CredentialError {
                     // Credential errors are not retryable
@@ -367,6 +382,9 @@ final class UsageViewModel {
             }
 
             while !Task.isCancelled {
+                #if DEBUG
+                print("[UsageViewModel] Auto-refresh triggered (interval: \(refreshInterval)s)")
+                #endif
                 await refresh(userInitiated: false)
                 await checkForUpdateIfNeeded()
                 try? await Task.sleep(for: .seconds(refreshInterval))
@@ -449,21 +467,33 @@ final class UsageViewModel {
     private func canRefreshSilently() async -> Bool {
         // Environment variable always works
         if await credentialService.hasEnvironmentToken() {
+            #if DEBUG
+            print("[UsageViewModel] canRefreshSilently: true (environment token)")
+            #endif
             return true
         }
 
         // If we have a warm cached token, we can definitely refresh
         if await credentialService.hasWarmCachedToken() {
+            #if DEBUG
+            print("[UsageViewModel] canRefreshSilently: true (warm cached token)")
+            #endif
             return true
         }
 
         // If we have any cached token (memory or app keychain), try it
         if await credentialService.hasCachedToken() {
+            #if DEBUG
+            print("[UsageViewModel] canRefreshSilently: true (cached token)")
+            #endif
             return true
         }
 
         // Check if keychain access would require interaction
         let status = await credentialService.preflightClaudeKeychainAccess()
+        #if DEBUG
+        print("[UsageViewModel] canRefreshSilently: preflight status = \(status)")
+        #endif
         switch status {
         case .allowed:
             return true

@@ -48,7 +48,7 @@ enum CredentialSource: String {
 }
 
 /// Result of a preflight keychain access check (non-interactive)
-enum KeychainAccessStatus {
+enum KeychainAccessStatus: Equatable {
     case allowed              // Can access without user interaction
     case notFound             // Keychain item doesn't exist
     case interactionRequired  // Will require user to grant access
