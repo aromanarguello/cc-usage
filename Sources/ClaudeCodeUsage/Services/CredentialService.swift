@@ -299,6 +299,34 @@ actor CredentialService {
         SecItemDelete(query as CFDictionary)
     }
 
+    // MARK: - App's File Token Cache
+
+    /// Saves token to file cache (fallback when keychain ACL is broken)
+    private func cacheTokenInFile(_ token: String) {
+        do {
+            try FileManager.default.createDirectory(
+                at: appCacheDirectory,
+                withIntermediateDirectories: true
+            )
+
+            let payload: [String: String] = [
+                "token": token,
+                "cached": ISO8601DateFormatter().string(from: Date())
+            ]
+            let data = try JSONSerialization.data(withJSONObject: payload)
+            try data.write(to: fileCachePath, options: [.atomic])
+
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: fileCachePath.path
+            )
+        } catch {
+            #if DEBUG
+            print("[CredentialService] Failed to cache token in file: \(error)")
+            #endif
+        }
+    }
+
     // MARK: - File System Credentials
 
     /// Path to Claude Code's file-based credentials (used on Linux, may exist on Mac)
