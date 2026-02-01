@@ -163,7 +163,7 @@ final class UsageViewModel {
         await credentialService.clearAccessDeniedState()
         await credentialService.invalidateCache()
         self.keychainAccessDenied = false
-        await refresh()
+        await refresh(userInitiated: true)
     }
 
     /// Clears all OAuth caches and triggers re-authentication
@@ -219,14 +219,26 @@ final class UsageViewModel {
     }
 
     func refresh(userInitiated: Bool = false) async {
+        #if DEBUG
+        print("[UsageViewModel] refresh called, userInitiated: \(userInitiated), refreshState: \(refreshState)")
+        #endif
+
         // Cancel any stuck previous refresh if user-initiated
         if userInitiated {
             currentRefreshTask?.cancel()
             // Clear the keychain denial cooldown when user manually retries
             await credentialService.clearAccessDeniedState()
+            #if DEBUG
+            print("[UsageViewModel] Cleared access denied state for user-initiated refresh")
+            #endif
         }
 
-        guard refreshState.canAutoRefresh || refreshState == .needsManualRefresh || userInitiated else { return }
+        guard refreshState.canAutoRefresh || refreshState == .needsManualRefresh || userInitiated else {
+            #if DEBUG
+            print("[UsageViewModel] refresh blocked by guard: refreshState=\(refreshState), userInitiated=\(userInitiated)")
+            #endif
+            return
+        }
 
         // For automatic refreshes, check if we can proceed without prompting
         // However, if we already have data, keep trying - don't block indefinitely
@@ -282,8 +294,14 @@ final class UsageViewModel {
                     // Credential errors are not retryable
                     lastError = error
                     errorMessage = error.localizedDescription
+                    #if DEBUG
+                    print("[UsageViewModel] Credential error: \(error)")
+                    #endif
                     if error.isAccessDenied {
                         self.keychainAccessDenied = true
+                        #if DEBUG
+                        print("[UsageViewModel] Keychain access denied")
+                        #endif
                     }
                     break  // Don't retry credential errors
                 } catch {

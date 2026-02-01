@@ -416,6 +416,8 @@ actor CredentialService {
     func getAccessToken() throws -> String {
         // 1. Environment variable (highest priority - bypasses all other sources)
         if let envToken = getTokenFromEnvironment() {
+            // Also cache to file so app can recover when env var is removed
+            cacheTokenInFile(envToken)
             lastCredentialSource = .environment
             return envToken
         }
