@@ -348,6 +348,11 @@ actor CredentialService {
         }
     }
 
+    /// Clears the file cache
+    private func clearFileCache() {
+        try? FileManager.default.removeItem(at: fileCachePath)
+    }
+
     // MARK: - File System Credentials
 
     /// Path to Claude Code's file-based credentials (used on Linux, may exist on Mac)
