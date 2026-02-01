@@ -327,6 +327,27 @@ actor CredentialService {
         }
     }
 
+    /// Retrieves token from file cache
+    private func getTokenFromFileCache() -> String? {
+        guard FileManager.default.fileExists(atPath: fileCachePath.path) else {
+            return nil
+        }
+
+        do {
+            let data = try Data(contentsOf: fileCachePath)
+            guard data.count < 100_000 else { return nil }
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let token = json["token"] as? String,
+                  isValidTokenFormat(token) else {
+                return nil
+            }
+            return token
+        } catch {
+            return nil
+        }
+    }
+
     // MARK: - File System Credentials
 
     /// Path to Claude Code's file-based credentials (used on Linux, may exist on Mac)
