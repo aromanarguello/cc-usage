@@ -219,6 +219,10 @@ actor CredentialService {
             return "Using app's cached token"
         }
 
+        if getTokenFromFileCache() != nil {
+            return "Using app's file-cached token"
+        }
+
         if hasFileCredentials() {
             return "Using file-based credentials"
         }
@@ -408,7 +412,7 @@ actor CredentialService {
     // MARK: - Token Retrieval
 
     /// Attempts to get an OAuth access token from Claude Code CLI credentials
-    /// Priority order: 1) Env var, 2) Memory cache, 3) App cache, 4) File system, 5) Claude's keychain
+    /// Priority order: 1) Env var, 2) Memory cache, 3) App keychain cache, 4) App file cache, 5) File credentials, 6) Cooldown check, 7) Claude's keychain
     func getAccessToken() throws -> String {
         // 1. Environment variable (highest priority - bypasses all other sources)
         if let envToken = getTokenFromEnvironment() {
@@ -430,22 +434,31 @@ actor CredentialService {
             return appCachedToken
         }
 
-        // 4. Check file-based credentials (used on Linux, may exist on Mac)
+        // 4. Check app's file cache (fallback when keychain ACL broken)
+        if let fileCachedToken = getTokenFromFileCache() {
+            cachedToken = fileCachedToken
+            tokenCacheTimestamp = Date()
+            lastCredentialSource = .fileCache
+            return fileCachedToken
+        }
+
+        // 5. Check file-based credentials (used on Linux, may exist on Mac)
         if let fileToken = getTokenFromFile() {
             cachedToken = fileToken
             tokenCacheTimestamp = Date()
             // Also cache in app's keychain for consistency
             cacheTokenInAppKeychain(fileToken)
+            cacheTokenInFile(fileToken)
             lastCredentialSource = .file
             return fileToken
         }
 
-        // 5. If keychain access was recently denied, don't try Claude's keychain (cooldown active)
+        // 6. If keychain access was recently denied, don't try Claude's keychain (cooldown active)
         if isDenialCooldownActive {
             throw CredentialError.accessDenied
         }
 
-        // 6. Try OAuth token from Claude's keychain (may prompt user)
+        // 7. Try OAuth token from Claude's keychain (may prompt user)
         do {
             let token = try getClaudeCodeToken()
             // Cache in memory
@@ -453,6 +466,7 @@ actor CredentialService {
             tokenCacheTimestamp = Date()
             // Also cache in app's keychain for future use (avoids repeated prompts)
             cacheTokenInAppKeychain(token)
+            cacheTokenInFile(token)
             lastCredentialSource = .keychain
             return token
         } catch let error as CredentialError {
@@ -470,8 +484,9 @@ actor CredentialService {
         cachedToken = nil
         tokenCacheTimestamp = nil
         cachedManualKey = nil
-        // Also clear the app's keychain cache since the token is invalid
+        // Also clear the app's keychain and file caches since the token is invalid
         clearAppKeychainCache()
+        clearFileCache()
     }
 
     /// Clears all OAuth caches and resets denial state
@@ -480,6 +495,7 @@ actor CredentialService {
         cachedToken = nil
         tokenCacheTimestamp = nil
         clearAppKeychainCache()
+        clearFileCache()
         lastDenialTimestamp = nil  // Reset so it will prompt for access again
     }
 
@@ -655,9 +671,9 @@ actor CredentialService {
         return (try? getManualAPIKey()) != nil
     }
 
-    /// Checks if we have a cached token available (in memory or app keychain)
+    /// Checks if we have a cached token available (in memory, app keychain, or file cache)
     func hasCachedToken() -> Bool {
-        return cachedToken != nil || getTokenFromAppCache() != nil
+        return cachedToken != nil || getTokenFromAppCache() != nil || getTokenFromFileCache() != nil
     }
 
     /// Returns true if we have a recently cached token that's likely still valid
