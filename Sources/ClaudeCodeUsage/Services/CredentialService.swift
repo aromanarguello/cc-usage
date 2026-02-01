@@ -43,6 +43,7 @@ enum CredentialSource: String {
     case environment = "Environment Variable"
     case memoryCache = "Memory Cache"
     case appCache = "App Keychain Cache"
+    case fileCache = "App File Cache"
     case file = "File System"
     case keychain = "Claude Code Keychain"
 }
