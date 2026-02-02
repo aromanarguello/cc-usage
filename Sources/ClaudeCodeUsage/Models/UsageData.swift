@@ -113,7 +113,7 @@ struct UsageAPIResponse: Decodable {
 
     struct UsageWindowResponse: Decodable {
         let utilization: Double
-        let resetsAt: Date
+        let resetsAt: Date?  // API returns null when utilization is 0%
 
         enum CodingKeys: String, CodingKey {
             case utilization
@@ -144,25 +144,31 @@ struct UsageAPIResponse: Decodable {
     }
 
     func toUsageData() -> UsageData {
-        UsageData(
+        // Default reset time when API returns null (e.g., when utilization is 0%)
+        let defaultResetTime = Date().addingTimeInterval(5 * 3600) // 5 hours from now
+
+        return UsageData(
             fiveHour: UsageData.UsageWindow(
                 utilization: fiveHour.utilization / 100.0,  // API returns percentage, convert to decimal
-                resetsAt: fiveHour.resetsAt
+                resetsAt: fiveHour.resetsAt ?? defaultResetTime
             ),
             sevenDay: UsageData.UsageWindow(
                 utilization: sevenDay.utilization / 100.0,  // API returns percentage, convert to decimal
-                resetsAt: sevenDay.resetsAt
+                resetsAt: sevenDay.resetsAt ?? Date().addingTimeInterval(7 * 24 * 3600) // 7 days default
             ),
-            sevenDaySonnet: sevenDaySonnet.map { response in
-                UsageData.UsageWindow(
+            sevenDaySonnet: sevenDaySonnet.flatMap { response in
+                // Only include if we have a valid reset time
+                guard let resetTime = response.resetsAt else { return nil }
+                return UsageData.UsageWindow(
                     utilization: response.utilization / 100.0,
-                    resetsAt: response.resetsAt
+                    resetsAt: resetTime
                 )
             },
-            sevenDayOpus: sevenDayOpus.map { response in
-                UsageData.UsageWindow(
+            sevenDayOpus: sevenDayOpus.flatMap { response in
+                guard let resetTime = response.resetsAt else { return nil }
+                return UsageData.UsageWindow(
                     utilization: response.utilization / 100.0,
-                    resetsAt: response.resetsAt
+                    resetsAt: resetTime
                 )
             },
             extraUsage: extraUsage.flatMap { response in
