@@ -412,7 +412,9 @@ actor CredentialService {
     // MARK: - Token Retrieval
 
     /// Attempts to get an OAuth access token from Claude Code CLI credentials
-    /// Priority order: 1) Env var, 2) Memory cache, 3) App keychain cache, 4) App file cache, 5) File credentials, 6) Cooldown check, 7) Claude's keychain
+    /// Priority order (macOS): 1) Env var, 2) Memory cache, 3) App keychain cache, 4) Claude's keychain, 5) App file cache, 6) File credentials
+    /// On macOS, Claude's keychain is the authoritative source - it gets updated when tokens refresh,
+    /// while file-based sources may contain stale tokens.
     func getAccessToken() throws -> String {
         // 1. Environment variable (highest priority - bypasses all other sources)
         if let envToken = getTokenFromEnvironment() {
@@ -436,7 +438,33 @@ actor CredentialService {
             return appCachedToken
         }
 
-        // 4. Check app's file cache (fallback when keychain ACL broken)
+        // 4. If keychain access was recently denied, skip to file fallbacks
+        if !isDenialCooldownActive {
+            // 5. Try OAuth token from Claude's keychain FIRST (authoritative source on macOS)
+            // This is preferred over file sources because Claude CLI updates keychain on token refresh
+            do {
+                let token = try getClaudeCodeToken()
+                // Cache in memory
+                cachedToken = token
+                tokenCacheTimestamp = Date()
+                // Also cache in app's keychain for future use (avoids repeated prompts)
+                cacheTokenInAppKeychain(token)
+                cacheTokenInFile(token)
+                lastCredentialSource = .keychain
+                return token
+            } catch let error as CredentialError {
+                // Track access denied state with timestamp (starts cooldown)
+                if error.isAccessDenied {
+                    lastDenialTimestamp = Date()
+                }
+                // Don't throw yet - fall through to file-based fallbacks
+            } catch {
+                // Other errors - fall through to file-based fallbacks
+            }
+        }
+
+        // 6. File fallbacks (for Linux, or when keychain access denied on macOS)
+        // Check app's file cache
         if let fileCachedToken = getTokenFromFileCache() {
             cachedToken = fileCachedToken
             tokenCacheTimestamp = Date()
@@ -444,7 +472,7 @@ actor CredentialService {
             return fileCachedToken
         }
 
-        // 5. Check file-based credentials (used on Linux, may exist on Mac)
+        // 7. Check file-based credentials (used on Linux, may exist on Mac)
         if let fileToken = getTokenFromFile() {
             cachedToken = fileToken
             tokenCacheTimestamp = Date()
@@ -455,29 +483,13 @@ actor CredentialService {
             return fileToken
         }
 
-        // 6. If keychain access was recently denied, don't try Claude's keychain (cooldown active)
+        // 8. If we got here with denial cooldown active, throw access denied
         if isDenialCooldownActive {
             throw CredentialError.accessDenied
         }
 
-        // 7. Try OAuth token from Claude's keychain (may prompt user)
-        do {
-            let token = try getClaudeCodeToken()
-            // Cache in memory
-            cachedToken = token
-            tokenCacheTimestamp = Date()
-            // Also cache in app's keychain for future use (avoids repeated prompts)
-            cacheTokenInAppKeychain(token)
-            cacheTokenInFile(token)
-            lastCredentialSource = .keychain
-            return token
-        } catch let error as CredentialError {
-            // Track access denied state with timestamp (starts cooldown)
-            if error.isAccessDenied {
-                lastDenialTimestamp = Date()
-            }
-            throw error
-        }
+        // 9. No credentials found anywhere
+        throw CredentialError.notFound
     }
 
     /// Invalidates all token caches, forcing a fresh keychain read on next access
