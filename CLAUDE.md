@@ -102,8 +102,22 @@ Models (Data structures)
 
 ### Credential Priority
 
-1. **OAuth token** from Claude Code CLI (Keychain path: `claudeAiOauth.accessToken`)
-2. **Manual API key** fallback stored in app's own Keychain entry
+Order (highest to lowest):
+1. `CLAUDE_USAGE_OAUTH_TOKEN` environment variable
+2. In-memory cache (valid for current session)
+3. App's keychain cache (`ClaudeCodeUsage-oauth`)
+4. Claude Code's keychain (`Claude Code-credentials`) - authoritative on macOS
+5. App's file cache (`~/.config/claudecodeusage/oauth-cache.json`)
+6. File credentials (`~/.claude/.credentials.json`)
+7. Manual API key fallback
+
+**Gotcha:** Claude CLI updates keychain but may leave file credentials stale. Keychain is preferred over file sources to avoid using expired tokens.
+
+### Account Switch Detection
+
+The app automatically detects when you switch Claude accounts (`claude logout` → `claude login`). On each refresh cycle, it compares the cached token against Claude's keychain. If different, caches are invalidated and the new account's credentials are used.
+
+No manual intervention required - just switch accounts in Claude Code and the app picks it up within 60 seconds.
 
 ## Code Patterns
 
