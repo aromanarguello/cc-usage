@@ -240,6 +240,15 @@ final class UsageViewModel {
             return
         }
 
+        // Check for account switch before fetching
+        // This detects when user ran `claude logout && claude login` with different account
+        let accountSwitched = await credentialService.syncWithSourceIfNeeded()
+        #if DEBUG
+        if accountSwitched {
+            print("[UsageViewModel] Account switch detected, caches invalidated")
+        }
+        #endif
+
         // For automatic refreshes, check if we can proceed without prompting
         // However, if we already have data, keep trying - don't block indefinitely
         if !userInitiated {
