@@ -513,6 +513,66 @@ actor CredentialService {
         lastDenialTimestamp = nil  // Reset so it will prompt for access again
     }
 
+    // MARK: - Account Switch Detection
+
+    /// Syncs app cache with Claude Code's keychain if accessible.
+    /// Returns true if cache was invalidated (account changed or logged out).
+    /// This should be called at the start of each refresh cycle.
+    func syncWithSourceIfNeeded() async -> Bool {
+        // Skip if we have no cached token to compare
+        guard let currentCachedToken = cachedToken ?? getTokenFromAppCache() ?? getTokenFromFileCache() else {
+            return false
+        }
+
+        // Check if Claude's keychain is accessible without prompting
+        let status = preflightClaudeKeychainAccess()
+
+        switch status {
+        case .allowed:
+            // Can access keychain - compare tokens
+            do {
+                let keychainToken = try getClaudeCodeToken()
+                if keychainToken != currentCachedToken {
+                    // Token changed - account switch detected
+                    #if DEBUG
+                    print("[CredentialService] Account switch detected - invalidating caches")
+                    #endif
+                    invalidateCachesForAccountSwitch()
+                    return true
+                }
+            } catch {
+                // Failed to read keychain - skip sync
+                #if DEBUG
+                print("[CredentialService] Failed to read keychain during sync: \(error)")
+                #endif
+            }
+            return false
+
+        case .notFound:
+            // User logged out of Claude Code - invalidate our caches
+            #if DEBUG
+            print("[CredentialService] Claude keychain not found - user logged out, invalidating caches")
+            #endif
+            invalidateCachesForAccountSwitch()
+            return true
+
+        case .interactionRequired, .failure:
+            // Can't check without prompting - skip sync
+            return false
+        }
+    }
+
+    /// Invalidates all caches when an account switch is detected.
+    /// Unlike invalidateCache(), this doesn't require the token to be invalid,
+    /// just different from what Claude Code now has.
+    private func invalidateCachesForAccountSwitch() {
+        cachedToken = nil
+        tokenCacheTimestamp = nil
+        clearAppKeychainCache()
+        clearFileCache()
+        // Don't clear denial timestamp - that's unrelated to account switching
+    }
+
     /// Attempts to warm the token cache before sleep
     /// This ensures we have a fresh token in the app's keychain cache
     /// Returns true if cache was warmed successfully
