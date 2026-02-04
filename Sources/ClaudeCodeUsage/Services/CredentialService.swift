@@ -519,8 +519,15 @@ actor CredentialService {
     /// Returns true if cache was invalidated (account changed or logged out).
     /// This should be called at the start of each refresh cycle.
     func syncWithSourceIfNeeded() async -> Bool {
-        // Skip if we have no cached token to compare
-        guard let currentCachedToken = cachedToken ?? getTokenFromAppCache() ?? getTokenFromFileCache() else {
+        // If we have a warm in-memory cache, trust it - don't hit keychain
+        // Account switches will be detected via 401 response during actual API fetch
+        // This prevents keychain prompts on every refresh cycle (macOS ACL quirk)
+        if cachedToken != nil && isTokenCacheWarm {
+            return false
+        }
+
+        // Only verify cold caches (file-based) against keychain
+        guard let currentCachedToken = getTokenFromAppCache() ?? getTokenFromFileCache() else {
             return false
         }
 
