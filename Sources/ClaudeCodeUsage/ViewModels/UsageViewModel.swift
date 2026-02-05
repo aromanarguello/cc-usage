@@ -260,9 +260,10 @@ final class UsageViewModel {
                 // Check if the issue is that interaction is required
                 let status = await credentialService.preflightClaudeKeychainAccess()
 
-                // Only block if we have no data yet OR if interaction is required
-                // For .notFound or .failure, let it fail naturally with proper error handling
-                if usageData == nil || status == .interactionRequired {
+                // Only block auto-refresh when we have NO data AND keychain would prompt
+                // When we already have data, attempt the refresh - let API 401 handle stale tokens
+                // This prevents auto-refresh from getting stuck in needsManualRefresh state
+                if usageData == nil && status == .interactionRequired {
                     refreshState = .needsManualRefresh
                     return
                 } else {

@@ -1,5 +1,5 @@
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications
 
 @MainActor
 protocol NotificationServiceDelegate: AnyObject {
@@ -25,13 +25,23 @@ actor NotificationService: NSObject {
     }
 
     func setupDelegate() async {
+        guard Bundle.main.bundleIdentifier != nil else { return }
         await MainActor.run {
             UNUserNotificationCenter.current().delegate = self
         }
     }
 
     func requestAuthorization() async {
-        let center = UNUserNotificationCenter.current()
+        // UNUserNotificationCenter requires a proper app bundle - skip if running from raw executable
+        guard Bundle.main.bundleIdentifier != nil else {
+            #if DEBUG
+            print("[NotificationService] Skipping notifications - no bundle identifier (debug build)")
+            #endif
+            return
+        }
+
+        // UNUserNotificationCenter.current() must be called from main thread
+        let center = await MainActor.run { UNUserNotificationCenter.current() }
 
         do {
             let granted = try await center.requestAuthorization(options: [.alert, .sound])
@@ -65,8 +75,10 @@ actor NotificationService: NSObject {
             options: []
         )
 
-        let center = UNUserNotificationCenter.current()
-        center.setNotificationCategories([orphanCategory])
+        await MainActor.run {
+            let center = UNUserNotificationCenter.current()
+            center.setNotificationCategories([orphanCategory])
+        }
     }
 
     func notifyOrphansDetected(count: Int, pids: [Int]) async {
@@ -93,7 +105,8 @@ actor NotificationService: NSObject {
         )
 
         do {
-            try await UNUserNotificationCenter.current().add(request)
+            let center = await MainActor.run { UNUserNotificationCenter.current() }
+            try await center.add(request)
         } catch {
             print("Failed to send notification: \(error)")
         }

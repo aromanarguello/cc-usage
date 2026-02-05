@@ -7,7 +7,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "ClaudeCodeUsage",
-            path: "Sources/ClaudeCodeUsage"
+            path: "Sources/ClaudeCodeUsage",
+            swiftSettings: [
+                .define("DEBUG", .when(configuration: .debug))
+            ]
         )
     ]
 )

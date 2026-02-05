@@ -178,6 +178,12 @@ actor CredentialService {
     /// Checks if Claude's keychain item can be accessed without user interaction
     /// This is useful for determining UI state before triggering a prompt
     func preflightClaudeKeychainAccess() -> KeychainAccessStatus {
+        return preflightClaudeKeychainAccessWithData().status
+    }
+
+    /// Checks if Claude's keychain item can be accessed without user interaction,
+    /// and returns the token if accessible. This avoids a second keychain call.
+    private func preflightClaudeKeychainAccessWithData() -> (status: KeychainAccessStatus, token: String?) {
         let context = LAContext()
         context.interactionNotAllowed = true
 
@@ -194,13 +200,20 @@ actor CredentialService {
 
         switch status {
         case errSecSuccess:
-            return .allowed
+            // Extract token from the data
+            if let data = result as? Data,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let oauthData = json["claudeAiOauth"] as? [String: Any],
+               let accessToken = oauthData["accessToken"] as? String {
+                return (.allowed, accessToken)
+            }
+            return (.allowed, nil)
         case errSecItemNotFound:
-            return .notFound
+            return (.notFound, nil)
         case errSecInteractionNotAllowed, errSecAuthFailed, errSecUserCanceled:
-            return .interactionRequired
+            return (.interactionRequired, nil)
         default:
-            return .failure(status)
+            return (.failure(status), nil)
         }
     }
 
@@ -532,26 +545,19 @@ actor CredentialService {
         }
 
         // Check if Claude's keychain is accessible without prompting
-        let status = preflightClaudeKeychainAccess()
+        // Use combined check that gets both status and token in one non-blocking call
+        let (status, keychainToken) = preflightClaudeKeychainAccessWithData()
 
         switch status {
         case .allowed:
-            // Can access keychain - compare tokens
-            do {
-                let keychainToken = try getClaudeCodeToken()
-                if keychainToken != currentCachedToken {
-                    // Token changed - account switch detected
-                    #if DEBUG
-                    print("[CredentialService] Account switch detected - invalidating caches")
-                    #endif
-                    invalidateCachesForAccountSwitch()
-                    return true
-                }
-            } catch {
-                // Failed to read keychain - skip sync
+            // Got token non-blocking - compare with cached
+            if let keychainToken = keychainToken, keychainToken != currentCachedToken {
+                // Token changed - account switch detected
                 #if DEBUG
-                print("[CredentialService] Failed to read keychain during sync: \(error)")
+                print("[CredentialService] Account switch detected - invalidating caches")
                 #endif
+                invalidateCachesForAccountSwitch()
+                return true
             }
             return false
 
