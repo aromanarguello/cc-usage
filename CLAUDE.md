@@ -131,6 +131,24 @@ No manual intervention required - just switch accounts in Claude Code and the ap
 
 **DMG naming:** Always use `ClaudeCodeUsage.dmg` (no version number in filename). The version is tracked in the git tag and release title, not the asset name. This keeps download URLs stable across releases.
 
+## Release Process
+
+1. Bump version in `Resources/Info.plist` (CFBundleShortVersionString)
+2. Ask user to build, sign, notarize, and create DMG:
+   ```bash
+   make all
+   ```
+3. Commit and push:
+   ```bash
+   git add -A && git commit -m "fix/feat: description"
+   git push
+   ```
+4. Tag and release:
+   ```bash
+   git tag v1.x.x && git push origin v1.x.x
+   gh release create v1.x.x release/ClaudeCodeUsage.dmg --title "v1.x.x" --notes "Release notes"
+   ```
+
 ## Notes
 
 - App is LSUIElement (menu bar only, no dock icon)
