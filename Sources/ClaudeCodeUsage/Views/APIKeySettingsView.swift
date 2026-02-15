@@ -81,12 +81,28 @@ struct APIKeySettingsView: View {
                             .background(Color(nsColor: .controlBackgroundColor))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                            Text("To avoid keychain prompts, paste a token from `claude setup-token`:")
+                            Text("Avoid keychain prompts by setting up a long-lived token:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            Button(action: openTerminalWithSetupToken) {
+                                HStack {
+                                    Image(systemName: "terminal")
+                                    Text("Generate Token in Terminal")
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                                .background(Color(nsColor: .controlBackgroundColor))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                            .buttonStyle(.plain)
+
+                            Text("Then paste the token below:")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
 
                             HStack(spacing: 8) {
-                                SecureField("Setup token", text: $setupTokenInput)
+                                SecureField("Paste setup token", text: $setupTokenInput)
                                     .textFieldStyle(.roundedBorder)
                                 Button("Save") {
                                     Task {
@@ -179,11 +195,24 @@ struct APIKeySettingsView: View {
             }
         }
         .padding()
-        .frame(width: 300, height: 350)
+        .frame(width: 300, height: 400)
         .onAppear {
             Task {
                 hasSetupToken = await credentialService.hasSetupToken()
             }
+        }
+    }
+
+    private func openTerminalWithSetupToken() {
+        let script = """
+        tell application "Terminal"
+            activate
+            do script "claude setup-token"
+        end tell
+        """
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
         }
     }
 
