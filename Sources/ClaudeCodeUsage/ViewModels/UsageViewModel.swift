@@ -242,7 +242,13 @@ final class UsageViewModel {
 
         // Check for account switch before fetching
         // This detects when user ran `claude logout && claude login` with different account
-        let accountSwitched = await credentialService.syncWithSourceIfNeeded()
+        // Skip account switch detection when using setup token (it's explicit)
+        let accountSwitched: Bool
+        if await credentialService.hasSetupToken() {
+            accountSwitched = false
+        } else {
+            accountSwitched = await credentialService.syncWithSourceIfNeeded()
+        }
         #if DEBUG
         if accountSwitched {
             print("[UsageViewModel] Account switch detected, caches invalidated")
@@ -307,6 +313,12 @@ final class UsageViewModel {
                     #if DEBUG
                     print("[UsageViewModel] Credential error: \(error)")
                     #endif
+                    // If setup token was in use and we got a credential error, it's expired
+                    if await credentialService.hasSetupToken() {
+                        await credentialService.clearSetupToken()
+                        errorMessage = "Setup token expired. Re-run `claude setup-token` and paste the new token in Settings."
+                        break
+                    }
                     if error.isAccessDenied {
                         self.keychainAccessDenied = true
                         #if DEBUG
@@ -493,6 +505,11 @@ final class UsageViewModel {
     /// Checks if automatic refresh can proceed without user interaction
     /// Returns false if keychain access would require user prompt
     private func canRefreshSilently() async -> Bool {
+        // Setup token always allows silent refresh (stored in app's own keychain, never prompts)
+        if await credentialService.hasSetupToken() {
+            return true
+        }
+
         // Environment variable always works
         if await credentialService.hasEnvironmentToken() {
             #if DEBUG
