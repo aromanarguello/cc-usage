@@ -4,6 +4,7 @@ import AppKit
 struct UsagePopoverView: View {
     @Bindable var viewModel: UsageViewModel
     let apiService: UsageAPIService
+    let credentialService: CredentialService
     @State private var isCheckingUpdate = false
     @State private var updateAlert: UpdateAlertType? = nil
     @State private var showKillConfirmation = false
@@ -263,7 +264,7 @@ struct UsagePopoverView: View {
             Text("This will terminate all \(count) subagent process\(count == 1 ? "" : "es").")
         }
         .sheet(isPresented: $showSettings) {
-            APIKeySettingsView(viewModel: viewModel, apiService: apiService)
+            APIKeySettingsView(viewModel: viewModel, apiService: apiService, credentialService: credentialService)
         }
     }
 
@@ -720,5 +721,5 @@ struct UsagePopoverView: View {
     let credentialService = CredentialService()
     let apiService = UsageAPIService(credentialService: credentialService)
     let viewModel = UsageViewModel(apiService: apiService, credentialService: credentialService)
-    return UsagePopoverView(viewModel: viewModel, apiService: apiService)
+    return UsagePopoverView(viewModel: viewModel, apiService: apiService, credentialService: credentialService)
 }

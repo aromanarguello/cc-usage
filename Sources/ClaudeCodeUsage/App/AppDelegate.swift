@@ -23,7 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NotificationServiceDel
         let credentialService = CredentialService()
         let apiService = UsageAPIService(credentialService: credentialService)
         let viewModel = UsageViewModel(apiService: apiService, credentialService: credentialService)
-        menuBarController = MenuBarController(viewModel: viewModel, apiService: apiService)
+        menuBarController = MenuBarController(viewModel: viewModel, apiService: apiService, credentialService: credentialService)
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

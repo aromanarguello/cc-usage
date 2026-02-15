@@ -3,7 +3,12 @@ import SwiftUI
 struct APIKeySettingsView: View {
     @Bindable var viewModel: UsageViewModel
     let apiService: UsageAPIService
+    let credentialService: CredentialService
     @Environment(\.dismiss) private var dismiss
+    @State private var setupTokenInput: String = ""
+    @State private var hasSetupToken: Bool = false
+    @State private var setupTokenError: String?
+    @State private var showClearConfirmation: Bool = false
     @State private var isFetchingDebug = false
     @State private var debugCopied = false
     @AppStorage("orphanNotificationsEnabled") private var orphanNotificationsEnabled: Bool = true
@@ -34,20 +39,76 @@ struct APIKeySettingsView: View {
                             .font(.subheadline)
                             .fontWeight(.medium)
 
-                        HStack {
-                            Image(systemName: "person.badge.key.fill")
-                                .foregroundStyle(.green)
-                            Text("Claude Code OAuth")
+                        if hasSetupToken {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                Text("Setup token configured")
+                                    .font(.callout)
+                                Spacer()
+                                Button("Clear") {
+                                    showClearConfirmation = true
+                                }
+                                .foregroundStyle(.red)
                                 .font(.callout)
-                            Spacer()
-                        }
-                        .padding(12)
-                        .background(Color(nsColor: .controlBackgroundColor))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                            .padding(12)
+                            .background(Color(nsColor: .controlBackgroundColor))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .confirmationDialog("Remove setup token?", isPresented: $showClearConfirmation) {
+                                Button("Remove", role: .destructive) {
+                                    Task {
+                                        await credentialService.clearSetupToken()
+                                        hasSetupToken = false
+                                    }
+                                }
+                            } message: {
+                                Text("The app will revert to reading credentials from Claude Code's keychain, which may prompt for permission.")
+                            }
 
-                        Text("Credentials are read from Claude Code CLI")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            Text("Using long-lived token from `claude setup-token`")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            HStack {
+                                Image(systemName: "person.badge.key.fill")
+                                    .foregroundStyle(.green)
+                                Text("Claude Code OAuth")
+                                    .font(.callout)
+                                Spacer()
+                            }
+                            .padding(12)
+                            .background(Color(nsColor: .controlBackgroundColor))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                            Text("To avoid keychain prompts, paste a token from `claude setup-token`:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            HStack(spacing: 8) {
+                                SecureField("Setup token", text: $setupTokenInput)
+                                    .textFieldStyle(.roundedBorder)
+                                Button("Save") {
+                                    Task {
+                                        do {
+                                            try await credentialService.saveSetupToken(setupTokenInput)
+                                            hasSetupToken = true
+                                            setupTokenInput = ""
+                                            setupTokenError = nil
+                                        } catch {
+                                            setupTokenError = "Invalid token format"
+                                        }
+                                    }
+                                }
+                                .disabled(setupTokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            }
+
+                            if let error = setupTokenError {
+                                Text(error)
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                            }
+                        }
                     }
 
                     Divider()
@@ -118,7 +179,12 @@ struct APIKeySettingsView: View {
             }
         }
         .padding()
-        .frame(width: 300, height: 300)
+        .frame(width: 300, height: 350)
+        .onAppear {
+            Task {
+                hasSetupToken = await credentialService.hasSetupToken()
+            }
+        }
     }
 
     private func fetchAndCopyRawResponse() {
@@ -155,5 +221,5 @@ struct APIKeySettingsView: View {
     let credentialService = CredentialService()
     let apiService = UsageAPIService(credentialService: credentialService)
     let viewModel = UsageViewModel(apiService: apiService, credentialService: credentialService)
-    return APIKeySettingsView(viewModel: viewModel, apiService: apiService)
+    return APIKeySettingsView(viewModel: viewModel, apiService: apiService, credentialService: credentialService)
 }
