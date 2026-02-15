@@ -104,12 +104,15 @@ Models (Data structures)
 
 Order (highest to lowest):
 1. `CLAUDE_USAGE_OAUTH_TOKEN` environment variable
-2. In-memory cache (valid for current session)
-3. App's keychain cache (`ClaudeCodeUsage-oauth`)
-4. Claude Code's keychain (`Claude Code-credentials`) - authoritative on macOS
-5. App's file cache (`~/.config/claudecodeusage/oauth-cache.json`)
-6. File credentials (`~/.claude/.credentials.json`)
-7. Manual API key fallback
+2. Setup token from `claude setup-token` (stored in app's own keychain)
+3. In-memory cache (valid for current session)
+4. App's keychain cache (`ClaudeCodeUsage-oauth`)
+5. Claude Code's keychain (`Claude Code-credentials`) - authoritative on macOS
+6. App's file cache (`~/.config/claudecodeusage/oauth-cache.json`)
+7. File credentials (`~/.claude/.credentials.json`)
+8. Manual API key fallback
+
+**Setup token:** When configured (#2), the app uses it exclusively and never accesses Claude Code's keychain. This eliminates all permission prompts. Run `claude setup-token` and paste the result in Settings > Authentication.
 
 **Gotcha:** Claude CLI updates keychain but may leave file credentials stale. Keychain is preferred over file sources to avoid using expired tokens.
 
