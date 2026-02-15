@@ -721,5 +721,5 @@ struct UsagePopoverView: View {
     let credentialService = CredentialService()
     let apiService = UsageAPIService(credentialService: credentialService)
     let viewModel = UsageViewModel(apiService: apiService, credentialService: credentialService)
-    return UsagePopoverView(viewModel: viewModel, apiService: apiService, credentialService: credentialService)
+    UsagePopoverView(viewModel: viewModel, apiService: apiService, credentialService: credentialService)
 }

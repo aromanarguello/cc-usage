@@ -221,5 +221,5 @@ struct APIKeySettingsView: View {
     let credentialService = CredentialService()
     let apiService = UsageAPIService(credentialService: credentialService)
     let viewModel = UsageViewModel(apiService: apiService, credentialService: credentialService)
-    return APIKeySettingsView(viewModel: viewModel, apiService: apiService, credentialService: credentialService)
+    APIKeySettingsView(viewModel: viewModel, apiService: apiService, credentialService: credentialService)
 }
