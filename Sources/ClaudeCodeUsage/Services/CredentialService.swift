@@ -46,6 +46,7 @@ enum CredentialSource: String {
     case fileCache = "App File Cache"
     case file = "File System"
     case keychain = "Claude Code Keychain"
+    case setupToken = "Setup Token"
 }
 
 /// Result of a preflight keychain access check (non-interactive)
@@ -224,6 +225,10 @@ actor CredentialService {
         // Check sources in priority order
         if hasEnvironmentToken() {
             return "Using environment variable token"
+        }
+
+        if hasSetupToken() {
+            return "Using setup token"
         }
 
         if cachedToken != nil {
@@ -443,7 +448,7 @@ actor CredentialService {
         if let setupToken = getSetupToken() {
             cachedToken = setupToken
             tokenCacheTimestamp = Date()
-            lastCredentialSource = .appCache  // Will be changed to .setupToken in a later task
+            lastCredentialSource = .setupToken
             return setupToken
         }
 
