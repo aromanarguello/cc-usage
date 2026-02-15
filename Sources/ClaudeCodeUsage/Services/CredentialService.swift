@@ -65,6 +65,8 @@ actor CredentialService {
     private let manualKeyAccount = "anthropic-api-key"
     private let oauthCacheService = "ClaudeCodeUsage-oauth"
     private let oauthCacheAccount = "cached-token"
+    private let setupTokenService = "ClaudeCodeUsage-setup-token"
+    private let setupTokenAccount = "setup-token"
 
     // UserDefaults keys
     private let denialTimestampKey = "keychainDenialTimestamp"
@@ -437,7 +439,15 @@ actor CredentialService {
             return envToken
         }
 
-        // 2. Check in-memory cache (fastest, cleared on 401 or app restart)
+        // 2. Setup token (long-lived, stored in app's own keychain - never prompts)
+        if let setupToken = getSetupToken() {
+            cachedToken = setupToken
+            tokenCacheTimestamp = Date()
+            lastCredentialSource = .appCache  // Will be changed to .setupToken in a later task
+            return setupToken
+        }
+
+        // 3. Check in-memory cache (fastest, cleared on 401 or app restart)
         if let cached = cachedToken {
             lastCredentialSource = .memoryCache
             return cached
@@ -532,6 +542,11 @@ actor CredentialService {
     /// Returns true if cache was invalidated (account changed or logged out).
     /// This should be called at the start of each refresh cycle.
     func syncWithSourceIfNeeded() async -> Bool {
+        // Setup token is explicit — no account switch detection needed
+        if hasSetupToken() {
+            return false
+        }
+
         // If we have a warm in-memory cache, trust it - don't hit keychain
         // Account switches will be detected via 401 response during actual API fetch
         // This prevents keychain prompts on every refresh cycle (macOS ACL quirk)
@@ -767,5 +782,78 @@ actor CredentialService {
     /// This is a stronger signal than hasCachedToken() for automatic refresh decisions
     func hasWarmCachedToken() -> Bool {
         return isTokenCacheWarm && cachedToken != nil
+    }
+
+    // MARK: - Setup Token (Long-Lived)
+
+    /// Saves a setup token from `claude setup-token` to app's own keychain
+    func saveSetupToken(_ token: String) throws {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isValidTokenFormat(trimmed) else {
+            throw CredentialError.invalidAPIKeyFormat
+        }
+        guard let data = trimmed.data(using: .utf8) else {
+            throw CredentialError.invalidData
+        }
+
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: setupTokenService,
+            kSecAttrAccount as String: setupTokenAccount
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: setupTokenService,
+            kSecAttrAccount as String: setupTokenAccount,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked
+        ]
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        guard status == errSecSuccess else {
+            throw CredentialError.keychainError(status)
+        }
+
+        cachedToken = trimmed
+        tokenCacheTimestamp = Date()
+    }
+
+    /// Retrieves setup token from app's own keychain
+    func getSetupToken() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: setupTokenService,
+            kSecAttrAccount as String: setupTokenAccount,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let token = String(data: data, encoding: .utf8),
+              isValidTokenFormat(token) else {
+            return nil
+        }
+        return token
+    }
+
+    /// Removes setup token and reverts to keychain-based flow
+    func clearSetupToken() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: setupTokenService,
+            kSecAttrAccount as String: setupTokenAccount
+        ]
+        SecItemDelete(query as CFDictionary)
+        cachedToken = nil
+        tokenCacheTimestamp = nil
+    }
+
+    /// Returns true if a setup token is configured
+    func hasSetupToken() -> Bool {
+        return getSetupToken() != nil
     }
 }
