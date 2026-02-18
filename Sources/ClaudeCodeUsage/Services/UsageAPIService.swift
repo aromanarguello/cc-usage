@@ -7,6 +7,11 @@ enum APIError: Error, LocalizedError {
     case decodingError(Error)
     case serverError(Int, String?)
 
+    var isUnauthorized: Bool {
+        if case .unauthorized = self { return true }
+        return false
+    }
+
     var errorDescription: String? {
         switch self {
         case .invalidURL:
@@ -32,29 +37,31 @@ actor UsageAPIService {
         self.credentialService = credentialService
     }
 
-    func fetchUsage() async throws -> UsageData {
+    func fetchUsage(allowPrompt: Bool = false) async throws -> UsageData {
         do {
-            return try await performFetch()
+            return try await performFetch(allowPrompt: allowPrompt)
         } catch APIError.unauthorized {
             // Invalidate cached credentials - they're no longer valid
             await credentialService.invalidateCache()
 
             // Try to refresh token by spawning CLI, then retry once
-            if !hasAttemptedRefresh {
-                hasAttemptedRefresh = true
-                if await triggerTokenRefresh() {
-                    // Small delay to let keychain update
-                    try? await Task.sleep(for: .milliseconds(500))
-                    return try await performFetch()
-                }
+            guard !hasAttemptedRefresh else {
+                hasAttemptedRefresh = false
+                throw APIError.unauthorized
             }
-            hasAttemptedRefresh = false
+            hasAttemptedRefresh = true
+            defer { hasAttemptedRefresh = false }
+            if await triggerTokenRefresh() {
+                // Small delay to let keychain update
+                try? await Task.sleep(for: .milliseconds(500))
+                return try await performFetch(allowPrompt: allowPrompt)
+            }
             throw APIError.unauthorized
         }
     }
 
-    private func performFetch() async throws -> UsageData {
-        let accessToken = try await credentialService.getAccessToken()
+    private func performFetch(allowPrompt: Bool = false) async throws -> UsageData {
+        let accessToken = try await credentialService.getAccessToken(allowPrompt: allowPrompt)
 
         guard let url = URL(string: baseURL) else {
             throw APIError.invalidURL

@@ -15,6 +15,12 @@ actor UpdateChecker {
     }
 
     func checkForUpdates() async throws -> UpdateResult {
+        // Debug builds don't embed Info.plist, so version falls back to "0.0.0".
+        // Skip update checks to avoid false "update available" prompts.
+        if currentVersion == "0.0.0" {
+            return UpdateResult(updateAvailable: false, latestVersion: currentVersion, downloadURL: nil)
+        }
+
         let url = URL(string: "https://api.github.com/repos/\(githubRepo)/releases/latest")!
 
         var request = URLRequest(url: url)

@@ -81,7 +81,7 @@ struct APIKeySettingsView: View {
                             .background(Color(nsColor: .controlBackgroundColor))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                            Text("Avoid keychain prompts by setting up a long-lived token:")
+                            Text("Experimental: `claude setup-token` tokens currently lack the `user:profile` scope needed for usage tracking.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
 
@@ -204,16 +204,7 @@ struct APIKeySettingsView: View {
     }
 
     private func openTerminalWithSetupToken() {
-        let script = """
-        tell application "Terminal"
-            activate
-            do script "claude setup-token"
-        end tell
-        """
-        if let appleScript = NSAppleScript(source: script) {
-            var error: NSDictionary?
-            appleScript.executeAndReturnError(&error)
-        }
+        TerminalHelper.runSetupToken()
     }
 
     private func fetchAndCopyRawResponse() {

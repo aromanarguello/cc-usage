@@ -99,6 +99,9 @@ final class UsageViewModel {
     private let agentCounter = AgentCounter()
     private var pollingTask: Task<Void, Never>?
     private var currentRefreshTask: Task<Void, Never>?
+    private var loadingStartTime: Date?
+    private var lastPollingHeartbeat: Date?
+    private var wakeTask: Task<Void, Never>?
 
     @ObservationIgnored
     @AppStorage("refreshInterval") private var refreshInterval: Double = 60
@@ -233,6 +236,18 @@ final class UsageViewModel {
             #endif
         }
 
+        // Safety valve: if loading state has been stuck for >45s, reset it.
+        // This prevents the polling loop from permanently stalling due to a hung task.
+        if case .loading = refreshState, let start = loadingStartTime,
+           Date().timeIntervalSince(start) > 45 {
+            #if DEBUG
+            print("[UsageViewModel] Resetting stuck loading state (>\(Int(Date().timeIntervalSince(start)))s)")
+            #endif
+            currentRefreshTask?.cancel()
+            refreshState = .idle
+            loadingStartTime = nil
+        }
+
         guard refreshState.canAutoRefresh || refreshState == .needsManualRefresh || userInitiated else {
             #if DEBUG
             print("[UsageViewModel] refresh blocked by guard: refreshState=\(refreshState), userInitiated=\(userInitiated)")
@@ -240,45 +255,9 @@ final class UsageViewModel {
             return
         }
 
-        // Check for account switch before fetching
-        // This detects when user ran `claude logout && claude login` with different account
-        // Skip account switch detection when using setup token (it's explicit)
-        let accountSwitched: Bool
-        if await credentialService.hasSetupToken() {
-            accountSwitched = false
-        } else {
-            accountSwitched = await credentialService.syncWithSourceIfNeeded()
-        }
-        #if DEBUG
-        if accountSwitched {
-            print("[UsageViewModel] Account switch detected, caches invalidated")
-        }
-        #endif
-
-        // For automatic refreshes, check if we can proceed without prompting
-        // However, if we already have data, keep trying - don't block indefinitely
-        if !userInitiated {
-            let canRefresh = await canRefreshSilently()
-            if !canRefresh {
-                #if DEBUG
-                print("[UsageViewModel] Auto-refresh blocked: canRefreshSilently() returned false")
-                #endif
-                // Check if the issue is that interaction is required
-                let status = await credentialService.preflightClaudeKeychainAccess()
-
-                // Only block auto-refresh when we have NO data AND keychain would prompt
-                // When we already have data, attempt the refresh - let API 401 handle stale tokens
-                // This prevents auto-refresh from getting stuck in needsManualRefresh state
-                if usageData == nil && status == .interactionRequired {
-                    refreshState = .needsManualRefresh
-                    return
-                } else {
-                    #if DEBUG
-                    print("[UsageViewModel] Allowing refresh attempt despite credential concerns (status: \(status), have existing data)")
-                    #endif
-                }
-            }
-        }
+        // No early-return gate — getAccessToken handles all sources including subprocess.
+        // The subprocess can read Claude's keychain safely (killable on timeout),
+        // so we no longer need to pre-check for cached credentials.
 
         // Show onboarding on first run before keychain access
         if !hasCompletedOnboardingStorage && usageData == nil && !keychainAccessDenied {
@@ -288,6 +267,7 @@ final class UsageViewModel {
         }
 
         refreshState = .loading
+        loadingStartTime = Date()
         errorMessage = nil
 
         currentRefreshTask = Task {
@@ -297,7 +277,7 @@ final class UsageViewModel {
             while attemptCount < maxRetryAttempts {
                 do {
                     usageData = try await withTimeout(seconds: refreshTimeoutSeconds) {
-                        try await self.apiService.fetchUsage()
+                        try await self.apiService.fetchUsage(allowPrompt: userInitiated)
                     }
                     lastFetchTime = Date()
                     self.keychainAccessDenied = false
@@ -313,12 +293,6 @@ final class UsageViewModel {
                     #if DEBUG
                     print("[UsageViewModel] Credential error: \(error)")
                     #endif
-                    // If setup token was in use and we got a credential error, it's expired
-                    if await credentialService.hasSetupToken() {
-                        await credentialService.clearSetupToken()
-                        errorMessage = "Setup token expired. Re-run `claude setup-token` and paste the new token in Settings."
-                        break
-                    }
                     if error.isAccessDenied {
                         self.keychainAccessDenied = true
                         #if DEBUG
@@ -326,6 +300,17 @@ final class UsageViewModel {
                         #endif
                     }
                     break  // Don't retry credential errors
+                } catch let error as APIError where error.isUnauthorized {
+                    // 401 with setup token: expired, revoked, or lacks required scopes — clear it
+                    if await credentialService.hasSetupToken() {
+                        await credentialService.clearSetupToken()
+                        lastError = error
+                        errorMessage = "Setup token expired. Re-run `claude setup-token` and paste a new token."
+                        break
+                    }
+                    lastError = error
+                    errorMessage = error.localizedDescription
+                    break
                 } catch {
                     lastError = error
                     attemptCount += 1
@@ -352,27 +337,31 @@ final class UsageViewModel {
                 self.keychainAccessDenied = await credentialService.wasAccessDenied()
             }
 
-            // Also refresh agent count
-            agentCount = await agentCounter.countAgents()
+            refreshState = .idle
+            loadingStartTime = nil
+        }
 
-            // Detect orphans and notify if enabled
+        await currentRefreshTask?.value
+
+        // Agent counting and orphan detection run AFTER refresh completes
+        // as fire-and-forget tasks — they must never block the polling loop
+        Task { @MainActor [agentCounter, notificationService, orphanNotificationsEnabled] in
+            let count = await agentCounter.countAgents()
+            self.agentCount = count
+
             if orphanNotificationsEnabled {
                 let orphans = await agentCounter.detectOrphanedSubagents()
                 if !orphans.isEmpty {
-                    orphanedSubagents = orphans
+                    self.orphanedSubagents = orphans
                     await notificationService.notifyOrphansDetected(
                         count: orphans.count,
                         pids: orphans.map { $0.pid }
                     )
                 } else {
-                    orphanedSubagents = []
+                    self.orphanedSubagents = []
                 }
             }
-
-            refreshState = .idle
         }
-
-        await currentRefreshTask?.value
     }
 
     func refreshAgentCount() async {
@@ -408,25 +397,17 @@ final class UsageViewModel {
         stopPolling()
 
         pollingTask = Task {
-            // Bootstrap: If onboarding is complete but we have no cached token,
-            // do a user-initiated refresh to populate the cache.
-            // This prevents getting stuck in needsManualRefresh on app launch.
-            if hasCompletedOnboardingStorage {
-                let canRefresh = await canRefreshSilently()
-                if !canRefresh {
-                    #if DEBUG
-                    print("[UsageViewModel] Bootstrap refresh: no cached credentials, doing user-initiated refresh")
-                    #endif
-                    await refresh(userInitiated: true)
-                }
-            }
-
             while !Task.isCancelled {
+                lastPollingHeartbeat = Date()
                 #if DEBUG
-                print("[UsageViewModel] Auto-refresh triggered (interval: \(refreshInterval)s)")
+                print("[UsageViewModel] Polling loop: starting refresh")
                 #endif
                 await refresh(userInitiated: false)
-                await checkForUpdateIfNeeded()
+                #if DEBUG
+                print("[UsageViewModel] Polling loop: refresh done, sleeping \(refreshInterval)s")
+                #endif
+                // Update check runs as fire-and-forget — must never block the loop
+                Task { await self.checkForUpdateIfNeeded() }
                 try? await Task.sleep(for: .seconds(refreshInterval))
             }
         }
@@ -443,7 +424,9 @@ final class UsageViewModel {
         lastUpdateCheck = Date()
 
         do {
-            let result = try await updateChecker.checkForUpdates()
+            let result = try await withTimeout(seconds: 15) {
+                try await self.updateChecker.checkForUpdates()
+            }
             if result.updateAvailable {
                 updateAvailable = true
                 latestVersion = result.latestVersion
@@ -464,10 +447,35 @@ final class UsageViewModel {
         pollingTask = nil
     }
 
+    /// Watchdog: restarts polling if the loop has stalled.
+    /// Called periodically from MenuBarController's title update loop.
+    func ensurePolling() {
+        // Don't restart during sleep/wake transitions
+        if case .pausedForSleep = refreshState { return }
+        if case .wakingUp = refreshState { return }
+
+        let staleThreshold = max(refreshInterval * 3, 180)
+        let isStalled: Bool
+        if let heartbeat = lastPollingHeartbeat {
+            isStalled = Date().timeIntervalSince(heartbeat) > staleThreshold
+        } else {
+            isStalled = pollingTask == nil
+        }
+
+        if isStalled {
+            #if DEBUG
+            print("[UsageViewModel] Polling watchdog: restarting stalled polling loop")
+            #endif
+            startPolling()
+        }
+    }
+
     /// Called when Mac is about to sleep - pauses all automatic refreshes
     /// and attempts to warm the credential cache
     func pauseForSleep() async {
         stopPolling()
+        wakeTask?.cancel()
+        wakeTask = nil
 
         // Warm credential cache before sleep
         // This ensures we have a fresh token when we wake
@@ -476,76 +484,19 @@ final class UsageViewModel {
         refreshState = .pausedForSleep
     }
 
-    /// Called when Mac wakes - attempts immediate refresh if cache is warm,
-    /// otherwise waits briefly before resuming
+    /// Called when Mac wakes - waits briefly for network to reconnect, then resumes polling
     func resumeAfterWake() {
-        Task {
-            // First, try an immediate refresh if we have cached credentials
-            // This provides instant feedback when cache is warm
-            let canRefresh = await canRefreshSilently()
+        wakeTask?.cancel()
+        wakeTask = Task {
+            // Brief delay to let network reconnect after wake
+            let resumeAt = Date().addingTimeInterval(wakeDelaySeconds)
+            refreshState = .wakingUp(resumeAt: resumeAt)
 
-            if canRefresh {
-                // Cache is warm, try immediate refresh
-                refreshState = .loading
-                await refresh(userInitiated: false)
-                startPolling()
-            } else {
-                // Cache cold or interaction required - wait briefly then resume
-                let resumeAt = Date().addingTimeInterval(wakeDelaySeconds)
-                refreshState = .wakingUp(resumeAt: resumeAt)
-
-                try? await Task.sleep(for: .seconds(wakeDelaySeconds))
-                guard case .wakingUp = refreshState else { return }
-                refreshState = .idle
-                startPolling()
-            }
+            try? await Task.sleep(for: .seconds(wakeDelaySeconds))
+            guard !Task.isCancelled, case .wakingUp = refreshState else { return }
+            refreshState = .idle
+            startPolling()
         }
     }
 
-    /// Checks if automatic refresh can proceed without user interaction
-    /// Returns false if keychain access would require user prompt
-    private func canRefreshSilently() async -> Bool {
-        // Setup token always allows silent refresh (stored in app's own keychain, never prompts)
-        if await credentialService.hasSetupToken() {
-            return true
-        }
-
-        // Environment variable always works
-        if await credentialService.hasEnvironmentToken() {
-            #if DEBUG
-            print("[UsageViewModel] canRefreshSilently: true (environment token)")
-            #endif
-            return true
-        }
-
-        // If we have a warm cached token, we can definitely refresh
-        if await credentialService.hasWarmCachedToken() {
-            #if DEBUG
-            print("[UsageViewModel] canRefreshSilently: true (warm cached token)")
-            #endif
-            return true
-        }
-
-        // If we have any cached token (memory or app keychain), try it
-        if await credentialService.hasCachedToken() {
-            #if DEBUG
-            print("[UsageViewModel] canRefreshSilently: true (cached token)")
-            #endif
-            return true
-        }
-
-        // Check if keychain access would require interaction
-        let status = await credentialService.preflightClaudeKeychainAccess()
-        #if DEBUG
-        print("[UsageViewModel] canRefreshSilently: preflight status = \(status)")
-        #endif
-        switch status {
-        case .allowed:
-            return true
-        case .interactionRequired:
-            return false
-        case .notFound, .failure:
-            return true  // Let it fail naturally with proper error handling
-        }
-    }
 }

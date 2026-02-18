@@ -4,51 +4,57 @@ enum ProcessError: Error {
     case timeout
     case executionFailed(Error)
     case terminated(exitCode: Int32)
+
+    var isTimeout: Bool {
+        if case .timeout = self { return true }
+        return false
+    }
 }
 
-/// Runs a subprocess asynchronously with timeout support
-/// This prevents blocking the actor/main thread during process execution
+/// Runs a subprocess asynchronously with timeout support.
+/// On timeout, the process is terminated via SIGTERM to prevent leaked zombies.
 func runProcessAsync(
     executablePath: String,
     arguments: [String],
     timeout: Duration = .seconds(10)
 ) async throws -> (output: String, exitCode: Int32) {
     try await withThrowingTaskGroup(of: (String, Int32).self) { group in
-        // Main task: run the process
         group.addTask {
-            try await withCheckedThrowingContinuation { continuation in
-                let task = Process()
-                task.executableURL = URL(fileURLWithPath: executablePath)
-                task.arguments = arguments
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: executablePath)
+            process.arguments = arguments
 
-                let pipe = Pipe()
-                task.standardOutput = pipe
-                task.standardError = FileHandle.nullDevice
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
 
-                do {
-                    try task.run()
-                } catch {
-                    continuation.resume(throwing: ProcessError.executionFailed(error))
-                    return
+            do {
+                try process.run()
+            } catch {
+                throw ProcessError.executionFailed(error)
+            }
+
+            // On cancellation (timeout), terminate the process so waitUntilExit returns.
+            // The GCD block always resumes the continuation exactly once.
+            return try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    DispatchQueue.global(qos: .utility).async {
+                        process.waitUntilExit()
+                        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                        let output = String(data: data, encoding: .utf8) ?? ""
+                        continuation.resume(returning: (output, process.terminationStatus))
+                    }
                 }
-
-                // Run blocking wait on background thread
-                DispatchQueue.global(qos: .utility).async {
-                    task.waitUntilExit()
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    let output = String(data: data, encoding: .utf8) ?? ""
-                    continuation.resume(returning: (output, task.terminationStatus))
-                }
+            } onCancel: {
+                process.terminate()
             }
         }
 
-        // Timeout task
         group.addTask {
             try await Task.sleep(for: timeout)
             throw ProcessError.timeout
         }
 
-        // Return first result, cancel the other
         let result = try await group.next()!
         group.cancelAll()
         return result

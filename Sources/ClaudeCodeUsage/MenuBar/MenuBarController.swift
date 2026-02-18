@@ -110,8 +110,14 @@ final class MenuBarController: ObservableObject {
         viewModel.startPolling()
 
         updateTask = Task { @MainActor in
+            var tickCount = 0
             while !Task.isCancelled {
                 updateStatusItemTitle()
+                tickCount += 1
+                // Every 30 seconds, verify the polling loop is alive
+                if tickCount % 30 == 0 {
+                    viewModel.ensurePolling()
+                }
                 try? await Task.sleep(for: .seconds(1))
             }
         }
@@ -213,8 +219,10 @@ final class MenuBarController: ObservableObject {
             // Clear update badge when user opens popover
             viewModel.acknowledgeUpdate()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            // Refresh when opening popover
-            Task { await viewModel.refresh(userInitiated: true) }
+            // Refresh when opening popover — but don't allow keychain prompts.
+            // The user clicked the icon to see data, not to authorize keychain access.
+            // If credentials need a prompt, the explicit "Retry" button handles that.
+            Task { await viewModel.refresh() }
         }
     }
 
@@ -225,7 +233,7 @@ final class MenuBarController: ObservableObject {
             // Clear update badge when user opens popover
             viewModel.acknowledgeUpdate()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            Task { await viewModel.refresh(userInitiated: true) }
+            Task { await viewModel.refresh() }
         }
     }
 

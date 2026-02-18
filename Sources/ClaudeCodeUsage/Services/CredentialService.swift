@@ -46,6 +46,7 @@ enum CredentialSource: String {
     case fileCache = "App File Cache"
     case file = "File System"
     case keychain = "Claude Code Keychain"
+    case subprocess = "Claude Keychain (subprocess)"
     case setupToken = "Setup Token"
 }
 
@@ -184,19 +185,26 @@ actor CredentialService {
         return preflightClaudeKeychainAccessWithData().status
     }
 
+    /// Applies no-UI attributes to a keychain query to prevent prompts.
+    /// Note: LAContext.interactionNotAllowed blocks biometric/passcode prompts but does NOT
+    /// block macOS ACL "wants to access key" password dialogs for another app's keychain items.
+    /// That's why automatic code paths use the subprocess reader instead of direct SecItemCopyMatching.
+    private func applyNoUIAttributes(to query: inout [String: Any]) {
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        query[kSecUseAuthenticationContext as String] = context
+    }
+
     /// Checks if Claude's keychain item can be accessed without user interaction,
     /// and returns the token if accessible. This avoids a second keychain call.
     private func preflightClaudeKeychainAccessWithData() -> (status: KeychainAccessStatus, token: String?) {
-        let context = LAContext()
-        context.interactionNotAllowed = true
-
-        let query: [String: Any] = [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
             kSecMatchLimit as String: kSecMatchLimitOne,
             kSecReturnData as String: true,
-            kSecUseAuthenticationContext as String: context
         ]
+        applyNoUIAttributes(to: &query)
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -429,13 +437,45 @@ actor CredentialService {
         return FileManager.default.fileExists(atPath: fileCredentialsPath.path)
     }
 
+    // MARK: - Subprocess Keychain Read
+
+    /// Reads Claude Code's OAuth token via the `security` CLI subprocess.
+    /// Unlike direct SecItemCopyMatching, the subprocess can be killed on timeout,
+    /// preventing the actor from blocking on macOS ACL password dialogs.
+    private func getClaudeCodeTokenViaSubprocess() async throws -> String {
+        let (output, exitCode) = try await runProcessAsync(
+            executablePath: "/usr/bin/security",
+            arguments: ["find-generic-password", "-s", serviceName, "-w"],
+            timeout: .seconds(3)
+        )
+
+        guard exitCode == 0, !output.isEmpty else {
+            throw CredentialError.notFound
+        }
+
+        // Parse JSON — same structure as getClaudeCodeToken()
+        guard let data = output.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let oauthData = json["claudeAiOauth"] as? [String: Any],
+              let accessToken = oauthData["accessToken"] as? String,
+              isValidTokenFormat(accessToken) else {
+            throw CredentialError.tokenNotFound
+        }
+        return accessToken
+    }
+
     // MARK: - Token Retrieval
 
     /// Attempts to get an OAuth access token from Claude Code CLI credentials
-    /// Priority order (macOS): 1) Env var, 2) Memory cache, 3) App keychain cache, 4) Claude's keychain, 5) App file cache, 6) File credentials
-    /// On macOS, Claude's keychain is the authoritative source - it gets updated when tokens refresh,
-    /// while file-based sources may contain stale tokens.
-    func getAccessToken() throws -> String {
+    /// Priority order: 1) Env var, 2) Setup token, 3) Memory cache, 4) App keychain cache,
+    ///   5) Claude's keychain via subprocess (automatic, killable on timeout),
+    ///   6) Claude's keychain via direct SecItemCopyMatching (user-initiated ONLY),
+    ///   7) App file cache, 8) File credentials
+    func getAccessToken(allowPrompt: Bool = false) async throws -> String {
+        #if DEBUG
+        print("[CredentialService] getAccessToken called, allowPrompt: \(allowPrompt)")
+        #endif
+
         // 1. Environment variable (highest priority - bypasses all other sources)
         if let envToken = getTokenFromEnvironment() {
             // Also cache to file so app can recover when env var is removed
@@ -458,7 +498,7 @@ actor CredentialService {
             return cached
         }
 
-        // 3. Check app's own keychain cache (survives app restarts, no ACL issues)
+        // 4. Check app's own keychain cache (survives app restarts, no ACL issues)
         if let appCachedToken = getTokenFromAppCache() {
             cachedToken = appCachedToken  // Also store in memory for speed
             tokenCacheTimestamp = Date()
@@ -466,33 +506,61 @@ actor CredentialService {
             return appCachedToken
         }
 
-        // 4. If keychain access was recently denied, skip to file fallbacks
+        // 5. Try Claude's keychain via subprocess (safe for automatic refreshes).
+        // Unlike direct SecItemCopyMatching, the subprocess can be killed on timeout,
+        // so it won't block the actor if macOS shows an ACL password dialog.
         if !isDenialCooldownActive {
-            // 5. Try OAuth token from Claude's keychain FIRST (authoritative source on macOS)
-            // This is preferred over file sources because Claude CLI updates keychain on token refresh
+            #if DEBUG
+            print("[CredentialService] Trying subprocess read of Claude's keychain...")
+            #endif
             do {
-                let token = try getClaudeCodeToken()
-                // Cache in memory
+                let token = try await getClaudeCodeTokenViaSubprocess()
                 cachedToken = token
                 tokenCacheTimestamp = Date()
-                // Also cache in app's keychain for future use (avoids repeated prompts)
+                cacheTokenInAppKeychain(token)
+                cacheTokenInFile(token)
+                lastCredentialSource = .subprocess
+                #if DEBUG
+                print("[CredentialService] Subprocess read succeeded")
+                #endif
+                return token
+            } catch let error as ProcessError where error.isTimeout {
+                // Subprocess timed out — likely an ACL prompt appeared.
+                // Set denial cooldown to avoid spawning a doomed subprocess every 60s.
+                lastDenialTimestamp = Date()
+                #if DEBUG
+                print("[CredentialService] Subprocess timed out, entering denial cooldown")
+                #endif
+            } catch {
+                #if DEBUG
+                print("[CredentialService] Subprocess failed: \(error)")
+                #endif
+                // Fall through to other sources
+            }
+        }
+
+        // 6. Try Claude's keychain directly ONLY when user explicitly initiated the action.
+        // SecItemCopyMatching on another app's keychain item can show a macOS ACL password
+        // prompt that blocks the entire CredentialService actor, freezing all polling.
+        if allowPrompt && !isDenialCooldownActive {
+            do {
+                let token = try getClaudeCodeToken(allowPrompt: true)
+                cachedToken = token
+                tokenCacheTimestamp = Date()
                 cacheTokenInAppKeychain(token)
                 cacheTokenInFile(token)
                 lastCredentialSource = .keychain
                 return token
             } catch let error as CredentialError {
-                // Track access denied state with timestamp (starts cooldown)
                 if error.isAccessDenied {
                     lastDenialTimestamp = Date()
                 }
-                // Don't throw yet - fall through to file-based fallbacks
             } catch {
-                // Other errors - fall through to file-based fallbacks
+                // Fall through to file-based fallbacks
             }
         }
 
-        // 6. File fallbacks (for Linux, or when keychain access denied on macOS)
-        // Check app's file cache
+        // 7. App file cache (for Linux, or when keychain access denied on macOS)
         if let fileCachedToken = getTokenFromFileCache() {
             cachedToken = fileCachedToken
             tokenCacheTimestamp = Date()
@@ -500,7 +568,7 @@ actor CredentialService {
             return fileCachedToken
         }
 
-        // 7. Check file-based credentials (used on Linux, may exist on Mac)
+        // 8. File-based credentials (used on Linux, may exist on Mac)
         if let fileToken = getTokenFromFile() {
             cachedToken = fileToken
             tokenCacheTimestamp = Date()
@@ -543,67 +611,11 @@ actor CredentialService {
 
     // MARK: - Account Switch Detection
 
-    /// Syncs app cache with Claude Code's keychain if accessible.
-    /// Returns true if cache was invalidated (account changed or logged out).
-    /// This should be called at the start of each refresh cycle.
+    /// No-op. Account switches are detected via API 401 responses — when the stale
+    /// cached token fails, invalidateCache() clears everything and the subprocess
+    /// reader picks up the new token from Claude's keychain on the next refresh.
     func syncWithSourceIfNeeded() async -> Bool {
-        // Setup token is explicit — no account switch detection needed
-        if hasSetupToken() {
-            return false
-        }
-
-        // If we have a warm in-memory cache, trust it - don't hit keychain
-        // Account switches will be detected via 401 response during actual API fetch
-        // This prevents keychain prompts on every refresh cycle (macOS ACL quirk)
-        if cachedToken != nil && isTokenCacheWarm {
-            return false
-        }
-
-        // Only verify cold caches (file-based) against keychain
-        guard let currentCachedToken = getTokenFromAppCache() ?? getTokenFromFileCache() else {
-            return false
-        }
-
-        // Check if Claude's keychain is accessible without prompting
-        // Use combined check that gets both status and token in one non-blocking call
-        let (status, keychainToken) = preflightClaudeKeychainAccessWithData()
-
-        switch status {
-        case .allowed:
-            // Got token non-blocking - compare with cached
-            if let keychainToken = keychainToken, keychainToken != currentCachedToken {
-                // Token changed - account switch detected
-                #if DEBUG
-                print("[CredentialService] Account switch detected - invalidating caches")
-                #endif
-                invalidateCachesForAccountSwitch()
-                return true
-            }
-            return false
-
-        case .notFound:
-            // User logged out of Claude Code - invalidate our caches
-            #if DEBUG
-            print("[CredentialService] Claude keychain not found - user logged out, invalidating caches")
-            #endif
-            invalidateCachesForAccountSwitch()
-            return true
-
-        case .interactionRequired, .failure:
-            // Can't check without prompting - skip sync
-            return false
-        }
-    }
-
-    /// Invalidates all caches when an account switch is detected.
-    /// Unlike invalidateCache(), this doesn't require the token to be invalid,
-    /// just different from what Claude Code now has.
-    private func invalidateCachesForAccountSwitch() {
-        cachedToken = nil
-        tokenCacheTimestamp = nil
-        clearAppKeychainCache()
-        clearFileCache()
-        // Don't clear denial timestamp - that's unrelated to account switching
+        return false
     }
 
     /// Attempts to warm the token cache before sleep
@@ -617,21 +629,27 @@ actor CredentialService {
 
         // Try to get token (will cache if successful)
         do {
-            _ = try getAccessToken()
+            _ = try await getAccessToken()
             return cachedToken != nil
         } catch {
             return false
         }
     }
 
-    /// Gets the Claude Code OAuth token from keychain
-    private func getClaudeCodeToken() throws -> String {
-        let query: [String: Any] = [
+    /// Gets the Claude Code OAuth token from keychain.
+    /// When `allowPrompt` is false, uses no-UI attributes to prevent macOS keychain dialogs.
+    /// When true, allows the system to show the keychain access prompt.
+    private func getClaudeCodeToken(allowPrompt: Bool = false) throws -> String {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
+
+        if !allowPrompt {
+            applyNoUIAttributes(to: &query)
+        }
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -640,7 +658,6 @@ actor CredentialService {
             if status == errSecItemNotFound {
                 throw CredentialError.notFound
             }
-            // Detect user denial of keychain access
             if isAccessDeniedStatus(status) {
                 throw CredentialError.accessDenied
             }

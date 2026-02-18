@@ -1,6 +1,24 @@
 import SwiftUI
 import AppKit
 
+enum TerminalHelper {
+    static func runSetupToken() {
+        let tmpDir = FileManager.default.temporaryDirectory
+        let scriptURL = tmpDir.appendingPathComponent("claude-setup-token.command")
+        let content = "#!/bin/bash\nclaude setup-token\n"
+        do {
+            try content.write(to: scriptURL, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        } catch {
+            return
+        }
+        NSWorkspace.shared.open(scriptURL)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            try? FileManager.default.removeItem(at: scriptURL)
+        }
+    }
+}
+
 struct UsagePopoverView: View {
     @Bindable var viewModel: UsageViewModel
     let apiService: UsageAPIService
@@ -12,7 +30,6 @@ struct UsagePopoverView: View {
     @State private var showSettings = false
     @State private var showKillAllConfirmation = false
     @State private var isKillingAllAgents = false
-    @State private var showTroubleshooting = false
 
     enum UpdateAlertType: Identifiable {
         case available(version: String, url: String?)
@@ -550,7 +567,6 @@ struct UsagePopoverView: View {
             }
             .buttonStyle(.plain)
 
-            // Open Keychain Access button
             Button(action: openKeychainAccess) {
                 HStack(spacing: 6) {
                     Image(systemName: "lock.rectangle")
@@ -565,32 +581,6 @@ struct UsagePopoverView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             .buttonStyle(.plain)
-
-            // Alternative
-            VStack(spacing: 4) {
-                Text("Or re-authenticate in terminal:")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
-                HStack(spacing: 6) {
-                    Text("claude")
-                        .font(.system(.caption, design: .monospaced))
-
-                    Button(action: {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString("claude", forType: .string)
-                    }) {
-                        Image(systemName: "doc.on.doc")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-            }
         }
         .padding(20)
     }
@@ -664,57 +654,10 @@ struct UsagePopoverView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             .buttonStyle(.plain)
-
-            // Troubleshooting section
-            DisclosureGroup(isExpanded: $showTroubleshooting) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("If you've already authenticated but still see this error, your credentials may exist but the app can't access them due to macOS keychain permissions.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text("Workaround: Set the token via environment variable before launching:")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    let workaroundCommand = "export CLAUDE_USAGE_OAUTH_TOKEN=$(security find-generic-password -s 'Claude Code-credentials' -w | jq -r '.claudeAiOauth.accessToken')"
-
-                    HStack(alignment: .top) {
-                        Text(workaroundCommand)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(.primary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Spacer()
-
-                        Button(action: {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(workaroundCommand, forType: .string)
-                        }) {
-                            Image(systemName: "doc.on.doc")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(8)
-                    .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-
-                    Text("Then run the app from that terminal session, or add to your shell profile.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.top, 8)
-            } label: {
-                Text("Having trouble?")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
         .padding(24)
     }
+
 }
 
 #Preview {
