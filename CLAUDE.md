@@ -118,9 +118,12 @@ Order (highest to lowest):
 
 ### Account Switch Detection
 
-The app automatically detects when you switch Claude accounts (`claude logout` → `claude login`). On each refresh cycle, it compares the cached token against Claude's keychain. If different, caches are invalidated and the new account's credentials are used.
+Account switches are detected via two mechanisms:
 
-No manual intervention required - just switch accounts in Claude Code and the app picks it up within 60 seconds.
+1. **Active sync (primary):** Every 5 minutes, the app compares its cached token against Claude's keychain via subprocess. If the token differs (account switch), all caches are invalidated and the new token is picked up on the next fetch.
+2. **Passive 401 fallback:** If the old token expires before the sync check runs, the API returns 401, which triggers `invalidateCache()` and a retry with the new token.
+
+No manual intervention required - just switch accounts in Claude Code and the app picks it up within ~5 minutes.
 
 ## Code Patterns
 

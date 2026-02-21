@@ -255,15 +255,23 @@ final class UsageViewModel {
             return
         }
 
-        // No early-return gate — getAccessToken handles all sources including subprocess.
-        // The subprocess can read Claude's keychain safely (killable on timeout),
-        // so we no longer need to pre-check for cached credentials.
-
         // Show onboarding on first run before keychain access
         if !hasCompletedOnboardingStorage && usageData == nil && !keychainAccessDenied {
             showOnboarding = true
             refreshState = .idle
             return
+        }
+
+        // Check for account switches by comparing cached token vs Claude's keychain.
+        // Throttled internally to every 5 minutes. If a switch is detected, caches are
+        // invalidated and the fetch below will pick up the new account's token.
+        if await credentialService.syncWithSourceIfNeeded() {
+            // Clear stale data so the old account's numbers don't show
+            // while the new token is being fetched
+            usageData = nil
+            #if DEBUG
+            print("[UsageViewModel] Account switch detected, caches invalidated")
+            #endif
         }
 
         refreshState = .loading

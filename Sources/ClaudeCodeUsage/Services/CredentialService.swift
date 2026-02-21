@@ -97,6 +97,12 @@ actor CredentialService {
     // Track when token was last cached (for freshness decisions)
     private var tokenCacheTimestamp: Date?
 
+    // Track when we last checked the keychain for account switches
+    private var lastSyncCheckTime: Date?
+
+    /// How often to re-check Claude's keychain for account switches (5 minutes)
+    private let syncCheckInterval: TimeInterval = 5 * 60
+
     // Token cache is considered "warm" if cached within last 6 hours
     private var isTokenCacheWarm: Bool {
         guard let timestamp = tokenCacheTimestamp else { return false }
@@ -611,10 +617,63 @@ actor CredentialService {
 
     // MARK: - Account Switch Detection
 
-    /// No-op. Account switches are detected via API 401 responses — when the stale
-    /// cached token fails, invalidateCache() clears everything and the subprocess
-    /// reader picks up the new token from Claude's keychain on the next refresh.
+    /// Compares the cached token against Claude's keychain to detect account switches.
+    /// If the keychain token differs from our cache, invalidates all caches so the next
+    /// getAccessToken() call picks up the new account's token.
+    /// Throttled to run at most every 5 minutes to avoid excessive subprocess spawns.
+    /// Skipped when using environment variable or setup token (not keychain-based),
+    /// and during denial cooldown (subprocess would time out anyway).
+    /// Returns true if an account switch was detected (caches were invalidated).
     func syncWithSourceIfNeeded() async -> Bool {
+        // Skip if using env var or setup token (not keychain-based)
+        if hasEnvironmentToken() || hasSetupToken() {
+            return false
+        }
+
+        // Skip if no cached token to compare against
+        guard let currentToken = cachedToken else {
+            return false
+        }
+
+        // Throttle: only check every syncCheckInterval
+        if let lastCheck = lastSyncCheckTime,
+           Date().timeIntervalSince(lastCheck) < syncCheckInterval {
+            return false
+        }
+
+        // Skip during denial cooldown (subprocess would fail anyway).
+        // Don't stamp lastSyncCheckTime so the check runs immediately once cooldown clears.
+        guard !isDenialCooldownActive else {
+            return false
+        }
+
+        // Stamp the timer only when the check will actually run
+        lastSyncCheckTime = Date()
+
+        // Read Claude's keychain via subprocess to check for changes
+        do {
+            let keychainToken = try await getClaudeCodeTokenViaSubprocess()
+            if keychainToken != currentToken {
+                #if DEBUG
+                print("[CredentialService] Account switch detected — keychain token differs from cache")
+                #endif
+                invalidateCache()
+                return true
+            }
+        } catch let error as ProcessError where error.isTimeout {
+            // Subprocess timed out — likely an ACL prompt appeared.
+            // Enter denial cooldown to avoid spawning a doomed subprocess every 5 min.
+            lastDenialTimestamp = Date()
+            #if DEBUG
+            print("[CredentialService] Sync subprocess timed out, entering denial cooldown")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[CredentialService] Sync check failed: \(error) — keeping cached token")
+            #endif
+            // Don't invalidate on read errors — the cache may still be valid
+        }
+
         return false
     }
 
